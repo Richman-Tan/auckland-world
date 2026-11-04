@@ -423,11 +423,19 @@ export function startApp(): void {
       l.camera.update(dt, renderPose, l.world.query, warp);
     } else if (state.kind === 'title' || state.kind === 'loading') {
       // Attract mode: a slow orbit around the CBD behind the title screen.
-      attractAngle += dt * 0.04;
+      // Slow orbit around the Sky Tower, framed in the right third so the title card has the left.
+      attractAngle += dt * 0.03;
       const st = l.world.meta.landmarks.skyTower;
       const cam = l.camera.camera;
-      cam.position.set(st.x + Math.sin(attractAngle) * 900, 380, st.z + Math.cos(attractAngle) * 900);
-      cam.lookAt(st.x, st.groundY + 120, st.z);
+      const radius = 1250;
+      const cx = st.x + Math.sin(attractAngle) * radius;
+      const cz = st.z + Math.cos(attractAngle) * radius;
+      cam.position.set(cx, 290, cz);
+      const fx = (st.x - cx) / radius;
+      const fz = (st.z - cz) / radius;
+      // Camera right vector is (-fz, 0, fx); aim left of the tower to push it right on screen.
+      const shift = innerWidth > innerHeight * 1.1 ? radius * 0.32 : 0;
+      cam.lookAt(st.x + fz * shift, st.groundY + 140, st.z - fx * shift);
       copyPose(renderPose, l.sim.state);
     } else {
       copyPose(renderPose, l.sim.state);

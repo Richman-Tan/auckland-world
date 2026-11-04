@@ -106,6 +106,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     sync,
     setLoading(p: LoadProgress) {
       loading.set(p);
+      title.setProgress(p);
     },
     updateTelemetry(t: Telemetry) {
       latest = t;
@@ -130,6 +131,8 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
       document.getElementById('scene')?.focus({ preventScroll: true });
     },
     setWorld(world: UiWorld) {
+      // The live city now renders behind the title screen: fade the placeholder backdrop.
+      root.classList.add('aw-world-ready');
       hud.setWorld(world, null);
       nav.setWorld(world, null);
       if (latest) nav.setPlane(latest.plane);

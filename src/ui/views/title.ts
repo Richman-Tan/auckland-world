@@ -1,56 +1,79 @@
-import type { AppEvent } from '../../app/contracts';
+import type { AppEvent, LoadProgress } from '../../app/contracts';
 import type { SiteContent } from '../../content/types';
+import { ACCENTS } from '../../shared/palette';
 import { CONTROLS_HINT } from '../controls';
 import { h } from '../dom';
 
-/** A crisp pixel skyline (Sky Tower, Harbour Bridge arch, Rangitoto, Mt Eden) as inline SVG. */
-function skyline(): HTMLElement {
-  const wrap = h('div', { class: 'aw-title__scene', 'aria-hidden': 'true' });
-  wrap.innerHTML = `<svg viewBox="0 0 160 40" preserveAspectRatio="xMidYMax slice" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
-<rect x="0" y="34" width="160" height="6" fill="#1f6f78"/>
-<path d="M0 34 L30 28 L48 34Z" fill="#6f9a4a"/>
-<path d="M98 34 L118 24 L138 34Z" fill="#557d3c"/>
-<g fill="#8fa3a8"><rect x="52" y="24" width="6" height="10"/><rect x="60" y="20" width="7" height="14"/><rect x="69" y="26" width="5" height="8"/><rect x="76" y="22" width="6" height="12"/><rect x="84" y="27" width="6" height="7"/></g>
-<g fill="#5f6b70"><rect x="44" y="28" width="6" height="6"/><rect x="92" y="25" width="5" height="9"/></g>
-<rect x="72" y="6" width="2" height="22" fill="#f4ecd8"/><rect x="70" y="12" width="6" height="3" fill="#f4ecd8"/><rect x="73" y="2" width="1" height="5" fill="#d7263d"/>
-<g fill="#d7263d"><rect x="2" y="30" width="26" height="1"/><rect x="6" y="28" width="18" height="1"/><rect x="2" y="31" width="1" height="3"/><rect x="27" y="31" width="1" height="3"/></g>
-<rect x="136" y="33" width="24" height="1" fill="#e9f3ea"/>
-<circle cx="132" cy="12" r="5" fill="#fff1c9"/>
-</svg>`;
-  return wrap;
-}
+/** A small side-view pixel plane for the primary button, nose to the right (15 x 7 grid). */
+const PLANE_SVG =
+  '<svg class="aw-title__plane" viewBox="0 0 15 7" shape-rendering="crispEdges" aria-hidden="true">' +
+  '<path fill="currentColor" d="M1 0h2v3H1zM2 3h11v2H2zM5 2h6v1H5zM14 1h1v5h-1zM13 3h1v2h-1zM6 5h1v1H6zM10 5h1v1h-1z"/></svg>';
 
+/**
+ * The landing screen. Until the map has loaded it sits on a dusk gradient with a slim progress bar;
+ * once the world is ready (UiApi.setWorld adds .aw-world-ready to the root) the backdrop fades and the
+ * live 3D city, orbited by the app's attract camera, shows through on the right.
+ */
 export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) => void) {
   const p = content.profile;
-  const fly = h('button', { class: 'aw-btn aw-btn--primary aw-title__fly', type: 'button', text: 'Fly over Auckland' });
+
+  const fly = h('button', { class: 'aw-btn aw-btn--primary aw-title__fly', type: 'button' });
+  fly.innerHTML = `${PLANE_SVG}<span>Fly over Auckland</span><span class="aw-title__cap" aria-hidden="true">Enter</span>`;
   fly.addEventListener('click', () => dispatch({ type: 'FLY' }));
 
-  const stopsList = h('ul', { class: 'aw-title__stops', 'aria-label': 'Stops' });
+  const read = h('a', { class: 'aw-btn aw-btn--ghost aw-title__read', href: '/page/', text: 'Read it as a page' });
+
+  const stopsList = h('ul', { class: 'aw-title__stops', 'aria-label': 'Go straight to a stop' });
   for (const s of content.stops) {
-    const b = h('button', { class: 'aw-btn', type: 'button' }, h('span', { class: 'aw-kbd', text: String(s.hotkey) }), s.label);
+    const b = h(
+      'button',
+      { class: 'aw-title__stop', type: 'button', style: `--accent: ${ACCENTS[s.beacon.color]}` },
+      h('span', { class: 'aw-title__stopkey', text: String(s.hotkey), 'aria-hidden': 'true' }),
+      h(
+        'span',
+        { class: 'aw-title__stoptext' },
+        h('span', { class: 'aw-title__stoplabel', text: s.label }),
+        h('span', { class: 'aw-title__stopplace', text: s.place }),
+      ),
+    );
     b.setAttribute('aria-label', `Go to ${s.label}, ${s.place}`);
     b.addEventListener('click', () => dispatch({ type: 'GO_TO_STOP', stop: s.id }));
     stopsList.append(h('li', {}, b));
   }
 
-  const foot = h('p', { class: 'aw-title__foot' });
-  foot.innerHTML =
-    'Map data © OpenStreetMap contributors, ODbL · Heights from LINZ LiDAR, CC BY 4.0 · Fonts under the OFL · Concept inspired by dvlan.dev · <a href="/page/#credits">Credits</a>';
+  const bar = h('span', { class: 'aw-title__barfill' });
+  const progressText = h('span', { class: 'aw-title__progresstext', text: 'Loading Auckland…' });
+  const progress = h('div', { class: 'aw-title__progress', role: 'status' }, h('span', { class: 'aw-title__bar' }, bar), progressText);
+
+  const credit = h('p', { class: 'aw-title__credit' });
+  credit.innerHTML = '© OpenStreetMap contributors · LINZ LiDAR · Inspired by dvlan.dev · <a href="/page/#credits">Credits</a>';
+
+  const card = h(
+    'div',
+    { class: 'aw-title__card' },
+    h('p', { class: 'aw-title__place' }, h('span', { class: 'aw-title__pin', 'aria-hidden': 'true' }), p.location),
+    h('h1', { class: 'aw-title__name', id: 'aw-title-name', text: p.name }),
+    h('p', { class: 'aw-title__role', text: p.title }),
+    h('p', { class: 'aw-title__tag', text: p.tagline }),
+    h('div', { class: 'aw-title__cta' }, fly, read),
+    h('p', { class: 'aw-title__or', text: 'Or jump straight to a stop' }),
+    stopsList,
+  );
 
   const el = h(
     'main',
     { class: 'aw-title', 'aria-labelledby': 'aw-title-name', hidden: true },
-    skyline(),
-    h('p', { class: 'aw-title__place', text: p.location }),
-    h('h1', { class: 'aw-title__name', id: 'aw-title-name', text: p.name }),
-    h('p', { class: 'aw-title__role', text: p.title }),
-    h('p', { class: 'aw-title__tag', text: p.tagline }),
-    fly,
-    h('p', { class: 'aw-title__or', text: 'Or go straight to a stop' }),
-    stopsList,
-    h('p', { class: 'aw-title__page' }, 'Or ', h('a', { href: '/page/', text: 'read it as a page' })),
-    h('p', { class: 'aw-title__hint', text: CONTROLS_HINT }),
-    foot,
+    h('div', { class: 'aw-title__backdrop', 'aria-hidden': 'true' }),
+    h('div', { class: 'aw-title__scrim', 'aria-hidden': 'true' }),
+    card,
+    h('footer', { class: 'aw-title__foot' }, progress, h('p', { class: 'aw-title__hint', text: CONTROLS_HINT }), credit),
   );
-  return { el, focusTarget: fly };
+
+  function setProgress(lp: LoadProgress): void {
+    const f = lp.totalBytes > 0 ? Math.min(1, lp.loadedBytes / lp.totalBytes) : 0;
+    bar.style.width = `${Math.round(f * 100)}%`;
+    progressText.textContent = `Loading Auckland · ${(lp.loadedBytes / 1e6).toFixed(1)} of ${(lp.totalBytes / 1e6).toFixed(1)} MB`;
+  }
+
+  return { el, focusTarget: fly, setProgress };
 }
