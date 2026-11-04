@@ -174,15 +174,16 @@ void main() {
   float nearL = 0.0;
   float farL = 0.0;
   if (dist < 2400.0) {
-    nearL = (land(p + vec2(14.0, 0.0)) + land(p + vec2(-14.0, 0.0)) + land(p + vec2(0.0, 14.0)) + land(p + vec2(0.0, -14.0))) * 0.25;
-    farL = (land(p + vec2(34.0, 12.0)) + land(p + vec2(-34.0, -12.0)) + land(p + vec2(-12.0, 34.0)) + land(p + vec2(12.0, -34.0))) * 0.25;
+    nearL = (land(p + vec2(6.0, 0.0)) + land(p + vec2(-6.0, 0.0)) + land(p + vec2(0.0, 6.0)) + land(p + vec2(0.0, -6.0))) * 0.25;
+    farL = (land(p + vec2(16.0, 6.0)) + land(p + vec2(-16.0, -6.0)) + land(p + vec2(-6.0, 16.0)) + land(p + vec2(6.0, -16.0))) * 0.25;
   }
   vec3 c = mix(uDeep, uShallow, 0.30 + 0.45 * q);
   c = mix(c, uShallow * 1.08, clamp(farL * 1.2 + nearL * 0.6, 0.0, 0.8));
 
   // foam: a solid fringe at the shore and a moving band just outside it
   float band = step(0.35, sin((p.x + p.y) * 0.05 - t * 1.4) * 0.5 + 0.5);
-  float foam = step(0.05, nearL) + (1.0 - step(0.05, nearL)) * step(0.05, farL) * band;
+  // a thin solid fringe, and a faint moving band just outside it
+  float foam = step(0.05, nearL) + (1.0 - step(0.05, nearL)) * step(0.05, farL) * band * 0.45;
   foam *= 1.0 - smoothstep(1400.0, 2400.0, dist);
   c = mix(c, uFoam, clamp(foam, 0.0, 1.0));
 
@@ -190,7 +191,7 @@ void main() {
   float h = hash21(floor(p / 4.0) + floor(t * 4.0) * 17.0);
   vec3 R = reflect(-V, vec3(0.0, 1.0, 0.0));
   float glint = max(dot(R, uSunDir), 0.0);
-  float thr = 0.9985 - 0.012 * step(0.7, glint) - 0.01 * step(0.9, glint);
+  float thr = 0.9993 - 0.004 * step(0.7, glint) - 0.004 * step(0.9, glint);
   float spark = step(thr, h) * (1.0 - smoothstep(300.0, 1100.0, dist));
   c = mix(c, uSparkle, spark);
 
