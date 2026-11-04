@@ -125,6 +125,11 @@ export async function buildLandmarks(): Promise<{ landmarks: Landmarks; report: 
     deckY.push(Math.round(median(outer.length >= 8 ? outer : vals) * 10) / 10);
     topY.push(Math.round(Math.max(...vals) * 10) / 10);
   }
+  // Remove single-sample spikes (the navigation-light mast at the crown reads about 9 m above the truss).
+  for (let i = 1; i < topY.length - 1; i++) {
+    const neighbours = Math.max(topY[i - 1], topY[i + 1]);
+    if (topY[i] - neighbours > 4) topY[i] = Math.round(((topY[i - 1] + topY[i + 1]) / 2) * 10) / 10;
+  }
   let ti = 0;
   for (let i = 0; i < topY.length; i++) if (topY[i] > topY[ti]) ti = i;
   const archTop = { x: a.x + vx * ti * STEP, z: a.z + vz * ti * STEP, y: topY[ti] };

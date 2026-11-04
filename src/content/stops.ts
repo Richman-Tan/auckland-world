@@ -27,8 +27,8 @@ export const stops: Stop[] = [
     label: 'WORK',
     place: 'Ponsonby Road',
     pitch: 'Sandfield, and my earlier internship',
-    // 130 Ponsonby Rd (Sandfield's public address); M1 refines from OSM addr:* tags. User to confirm.
-    beacon: { at: { kind: 'geo', lat: -36.8561, lon: 174.7461 }, height: { ref: 'ground', metres: 30 }, color: 'kowhai', icon: 'briefcase', triggerRadius: 180, orbitRadius: 200 },
+    // 130 Ponsonby Rd (Sandfield's public address), geocoded from OSM addr:* tags. User to confirm.
+    beacon: { at: { kind: 'geo', lat: -36.856975, lon: 174.747333 }, height: { ref: 'ground', metres: 30 }, color: 'kowhai', icon: 'briefcase', triggerRadius: 180, orbitRadius: 200 },
     briefing: workPages,
     experiences: [{ kind: 'briefing' }, { kind: 'room', roomId: 'office', status: 'planned' }],
   },
@@ -59,7 +59,8 @@ export const stops: Stop[] = [
     label: 'OFF THE CLOCK',
     place: 'Maungawhau / Mt Eden',
     pitch: 'Snowboarding, sport and the beach',
-    beacon: { at: { kind: 'geo', lat: -36.8767, lon: 174.7643 }, height: { ref: 'ground', metres: 10 }, color: 'volcanic', icon: 'peak', triggerRadius: 220, orbitRadius: 240 },
+    // Maungawhau summit (OSM natural=peak).
+    beacon: { at: { kind: 'geo', lat: -36.87805, lon: 174.76452 }, height: { ref: 'ground', metres: 10 }, color: 'volcanic', icon: 'peak', triggerRadius: 220, orbitRadius: 240 },
     briefing: offclockPages,
     experiences: [{ kind: 'briefing' }],
   },

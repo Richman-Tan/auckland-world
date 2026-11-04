@@ -97,10 +97,10 @@ describe('stops', () => {
   it('keeps the M0 beacon anchors', () => {
     const b = Object.fromEntries(content.stops.map((s) => [s.id, s.beacon]));
     expect(b.projects).toMatchObject({ at: { kind: 'landmark', id: 'skyTower' }, color: 'pohutukawa', icon: 'code', triggerRadius: 220, orbitRadius: 240 });
-    expect(b.work).toMatchObject({ at: { kind: 'geo', lat: -36.8561, lon: 174.7461 }, color: 'kowhai', icon: 'briefcase', triggerRadius: 180, orbitRadius: 200 });
+    expect(b.work).toMatchObject({ at: { kind: 'geo', lat: -36.856975, lon: 174.747333 }, color: 'kowhai', icon: 'briefcase', triggerRadius: 180, orbitRadius: 200 });
     expect(b.study).toMatchObject({ at: { kind: 'geo', lat: -36.8523, lon: 174.7698 }, color: 'harbour', icon: 'cap', triggerRadius: 180, orbitRadius: 200 });
     expect(b.talk).toMatchObject({ at: { kind: 'landmark', id: 'harbourBridgeTop' }, color: 'cream', icon: 'chat', triggerRadius: 200, orbitRadius: 220 });
-    expect(b.offclock).toMatchObject({ at: { kind: 'geo', lat: -36.8767, lon: 174.7643 }, color: 'volcanic', icon: 'peak', triggerRadius: 220, orbitRadius: 240 });
+    expect(b.offclock).toMatchObject({ at: { kind: 'geo', lat: -36.87805, lon: 174.76452 }, color: 'volcanic', icon: 'peak', triggerRadius: 220, orbitRadius: 240 });
   });
   it('covers the required projects and work entries', () => {
     const ids = (id: string) => content.stops.find((s) => s.id === id)!.briefing.map((p) => p.id);
