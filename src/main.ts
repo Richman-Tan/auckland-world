@@ -1,3 +1,4 @@
-/** Entry point. M5 replaces this with the app bootstrap (src/app/app.ts). */
-const ui = document.getElementById('ui');
-if (ui) ui.textContent = 'Richman Tan · over Auckland (scaffold)';
+import './app/base.css';
+import { startApp } from './app/app';
+
+startApp();

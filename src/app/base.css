@@ -1,0 +1,25 @@
+/* Page frame for the world view. UI styles live in src/ui; canvas sizing in src/render. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #10272c;
+  overscroll-behavior: none;
+}
+body {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* The pixel renderer positions and sizes the canvas itself. */
+#scene {
+  display: block;
+  outline: none;
+}
+#ui,
+#touch {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}

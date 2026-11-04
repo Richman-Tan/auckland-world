@@ -360,7 +360,7 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-ui *, .aw-ui *::before, .aw-ui *::after { animation: none !important; transition: none !important; }
 }
-.aw-ui[data-state='briefing'] .aw-prompt, .aw-ui[data-state='briefing'] .aw-pullup { display: none; }
+.aw-ui[data-state='briefing'] .aw-prompt, .aw-ui[data-state='briefing'] .aw-pullup, .aw-ui[data-state='briefing'] .aw-arrow { display: none; }
 .aw-ui .aw-briefing__x { font-family: var(--sans); }
 .aw-ui .aw-attrib { font-family: var(--sans); font-size: 11px; }
 @media (pointer: fine) { .aw-ui .aw-attrib { right: auto; left: calc(var(--safe-l) + 6px); } }
