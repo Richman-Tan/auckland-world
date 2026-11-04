@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>world harness</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: ui-monospace, Menlo, monospace; }
+      #stage { position: fixed; inset: 0; }
+      #hud { position: fixed; left: 8px; top: 8px; color: #fff; background: rgba(0,0,0,0.55); padding: 6px 8px; font-size: 12px; line-height: 1.4; white-space: pre; pointer-events: none; z-index: 2; }
+      #help { position: fixed; left: 8px; bottom: 8px; color: #ddd; background: rgba(0,0,0,0.45); padding: 4px 8px; font-size: 11px; pointer-events: none; z-index: 2; }
+      #msg { position: fixed; inset: 0; display: grid; place-items: center; color: #fff; font-size: 14px; z-index: 3; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="c"></canvas></div>
+    <div id="hud">loading...</div>
+    <div id="help">WASD move, drag to look, Q/E down/up, Shift fast, 1-5 pick active stop, 0 none. ?map=real ?view=cbd|eden|bridge|devonport ?q=low</div>
+    <div id="msg"></div>
+    <script type="module" src="./world.ts"></script>
+  </body>
+</html>
