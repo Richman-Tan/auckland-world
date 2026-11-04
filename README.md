@@ -9,7 +9,7 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 ```sh
 nvm use            # Node 22
 npm install
-npm run dev        # http://localhost:5173  (add ?map=fake to use the synthetic world)
+npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to start at a stop, ?debug for window.__aw)
 npm test
 npm run build
 ```
@@ -22,6 +22,17 @@ npm run map        # fetch (cached in data/), build public/map, check
 ```
 
 See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data licences.
+
+## Layout
+
+- `src/app/` state machine, contracts, stop placement and the app loop (`app.ts`)
+- `src/world/`, `src/render/` map loading, worker extrusion, low-res renderer, terrain, water, landmarks, beacons
+- `src/flight/`, `src/input/` flight model, autopilot, orbit, proximity, chase camera, plane, keyboard/mouse/touch
+- `src/ui/` title, HUD, nav, briefing, warp, pause and error views
+- `src/content/` everything the site says (one source for the 3D view and `/page/`)
+- `src/shared/` binary map formats, collision, palette (shared by the pipeline and the runtime)
+- `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
+- `dev/*.html` dev-only harnesses for the world, flight and UI
 
 ## Map pipeline
 
