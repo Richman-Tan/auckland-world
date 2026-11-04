@@ -32,12 +32,12 @@ export const studyPages: Page[] = [
     id: 'sesa',
     kicker: 'Student association',
     title: 'SESA',
-    subtitle: 'Treasurer · Social Events Lead',
-    period: '2024–present',
+    subtitle: 'Treasurer, previously Social Events Lead',
+    period: 'Social Events Lead 2024–2025 · Treasurer 2026–present',
     blocks: [
       {
         type: 'text',
-        text: 'The Software Engineering Student Association is the University of Auckland club for software students. I look after its money and help run its events.',
+        text: 'The Software Engineering Student Association is the University of Auckland club for software students. I look after its money, and before that I ran its social events.',
       },
       {
         type: 'list',

@@ -31,7 +31,7 @@ export const chatTopics: ChatTopic[] = [
     answer: [
       {
         type: 'text',
-        text: 'My favourite is DementiaGuide AI, an iOS care assistant with a talking 3D avatar and answers grounded in curated sources. I also led a team of 8 as Scrum Master on a gamified engineering-pathways platform, and built the media pipeline and authoring tools for a medical teaching simulator. Fly to the Sky Tower for the full list.',
+        text: 'My favourite is DementiaGuide AI, an iOS care assistant with a talking 3D avatar and answers grounded in curated sources. I was also Scrum Master for a team of 8 building a gamified engineering-pathways platform, and built the media pipeline and authoring tools for a medical teaching simulator. Fly to the Sky Tower for the full list.',
       },
     ],
     followUps: ['fun'],

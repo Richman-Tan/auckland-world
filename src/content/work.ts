@@ -10,11 +10,11 @@ export const workPages: Page[] = [
     kicker: 'Where I work',
     title: 'Sandfield',
     subtitle: 'Software Developer',
-    period: 'Intern from Nov 2025, now a Software Developer',
+    period: 'Intern Nov 2025 – Oct 2026 · Software Developer from Nov 2026',
     blocks: [
       {
         type: 'text',
-        text: 'I started at Sandfield as a Software Engineering Intern in November 2025, and I am now joining the team as a Software Developer.',
+        text: 'I started at Sandfield as a Software Engineering Intern in November 2025 and joined the team as a Software Developer in November 2026.',
       },
       {
         type: 'list',
@@ -27,7 +27,7 @@ export const workPages: Page[] = [
       },
       {
         type: 'text',
-        text: 'I keep the detail at the level of skills, because the products and clients belong to the team.',
+        text: 'I keep this at the level of skills, as the work belongs to the team.',
       },
       { type: 'tags', items: ['C#', '.NET', 'EF Core', 'PostgreSQL', 'React', 'TypeScript', 'Hangfire', 'RAG', 'iOS', 'Android'] },
     ],

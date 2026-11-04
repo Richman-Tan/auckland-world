@@ -12,7 +12,7 @@ export const projectPages: Page[] = [
     blocks: [
       {
         type: 'text',
-        text: 'DementiaGuide AI is an iOS assistant that answers dementia-care questions in plain language. It is my final-year research project, and I built it with a focus on answers you can trust.',
+        text: 'DementiaGuide AI is an iOS assistant that answers dementia-care questions in plain language. It is my final-year research project, built with a project partner, with a focus on answers you can trust.',
       },
       {
         type: 'list',
