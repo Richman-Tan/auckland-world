@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OG card (dev)</title>
+    <style>
+      .og-card { position: fixed; inset: 0; z-index: 5; pointer-events: none; color: #f4ecd8; }
+      .og-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6,18,22,.9) 0%, rgba(6,18,22,.78) 36%, rgba(6,18,22,.2) 62%, rgba(6,18,22,0) 78%); }
+      .og-text { position: absolute; left: 64px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+      .og-place { font-family: 'Departure Mono', monospace; font-size: 18px; letter-spacing: .22em; text-transform: uppercase; color: rgba(244,236,216,.75); display: flex; align-items: center; gap: 12px; -webkit-font-smoothing: none; }
+      .og-pin { width: 12px; height: 12px; background: #d7263d; box-shadow: 3px 3px 0 #0b1c20; }
+      .og-name { font-family: 'Jersey 10', monospace; font-size: 150px; line-height: .84; text-shadow: 4px 4px 0 #0b1c20, 8px 8px 0 #d7263d; }
+      .og-role { font-family: 'Jersey 10', monospace; font-size: 48px; line-height: 1; color: #f2c230; text-shadow: 3px 3px 0 #0b1c20; }
+      .og-tag { font-family: system-ui, sans-serif; font-size: 26px; max-width: 560px; line-height: 1.35; }
+      .og-url { font-family: 'Departure Mono', monospace; font-size: 20px; color: rgba(244,236,216,.8); margin-top: 6px; -webkit-font-smoothing: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div class="og-card">
+      <div class="og-scrim"></div>
+      <div class="og-text">
+        <p class="og-place" style="margin:0"><span class="og-pin"></span>Auckland, New Zealand</p>
+        <h1 class="og-name" style="margin:0;font-weight:400">Richman Tan</h1>
+        <p class="og-role" style="margin:0">Software Developer · Sandfield</p>
+        <p class="og-tag" style="margin:0">Fly a little plane over real Auckland to find my projects and work.</p>
+        <p class="og-url" style="margin:0">richmantan.vercel.app</p>
+      </div>
+    </div>
+    <script type="module" src="./og.ts"></script>
+  </body>
+</html>

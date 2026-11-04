@@ -14,6 +14,7 @@ export const projectPages: Page[] = [
         type: 'text',
         text: 'DementiaGuide AI is an iOS assistant that answers dementia-care questions in plain language. It is my final-year research project, built with a project partner, with a focus on answers you can trust.',
       },
+      { type: 'media', media: { src: '/media/dementiaguide-app.webp', alt: 'Four screens from the DementiaGuide AI app: the 3D avatar speaking, a chat answering a carer support question, the cited source card, and the sources list under the answer', width: 1200, height: 683, caption: 'The avatar, a grounded answer and its cited source (from the final report)' } },
       {
         type: 'list',
         items: [
@@ -24,6 +25,7 @@ export const projectPages: Page[] = [
           'A **systematic review of 13 sources** on AI-assisted dementia care, with WHO health-AI ethics guidance applied to the safety and privacy design.',
         ],
       },
+      { type: 'media', media: { src: '/media/dementiaguide-lipsync.webp', alt: 'Three frames of the 3D avatar showing distinct mouth shapes for the sounds b, ah and f', width: 1200, height: 504, caption: 'Lip-sync: distinct mouth shapes from the final pipeline' } },
       { type: 'tags', items: ['React Native (Expo)', 'TypeScript', 'RAG', 'Hybrid search', 'PostgreSQL', 'ElevenLabs'] },
       { type: 'links', links: [{ label: 'Source on GitHub', href: DEMENTIAGUIDE_REPO, kind: 'repo', primary: true }] },
     ],
@@ -58,6 +60,7 @@ export const projectPages: Page[] = [
         type: 'text',
         text: 'A web app for finding university club events and seeing which ones your friends are going to. Built in a team of 9 for CS732.',
       },
+      { type: 'media', media: { src: '/media/chudvents-feed.webp', alt: 'The Chudvents event feed: category filters across the top and cards for upcoming university club events', width: 1200, height: 604, caption: 'The event feed' } },
       { type: 'tags', items: ['React', 'TypeScript', 'Express', 'MongoDB', 'Firebase Auth'] },
     ],
   },
@@ -99,6 +102,7 @@ export const projectPages: Page[] = [
         type: 'text',
         text: 'Everything you can read here also exists as a plain page with no JavaScript, for screen readers, slow connections and anyone who would rather skim.',
       },
+      { type: 'media', media: { src: '/media/this-site.webp', alt: 'The pixel plane flying over Wynyard Quarter towards the Sky Tower, with the flight HUD along the bottom', width: 1200, height: 608, caption: 'Over Wynyard Quarter, heading for the Sky Tower' } },
       { type: 'tags', items: ['TypeScript', 'three.js', 'Vite', 'OpenStreetMap', 'LINZ LiDAR'] },
     ],
   },
