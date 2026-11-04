@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p scripts/tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p scripts/tsconfig.json && tsc --noEmit -p api/tsconfig.json",
     "test": "vitest run",
     "map:fetch": "tsx scripts/fetch/index.ts",
     "map:build": "tsx scripts/build/index.ts",
@@ -21,6 +21,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.5.0",
     "earcut": "3.2.4",
     "three": "0.187.0"
   },

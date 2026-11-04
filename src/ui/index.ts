@@ -5,6 +5,7 @@
  */
 import type { AppState, CreateUi, LoadProgress, PromptInfo, Telemetry, UiApi, UiWorld } from '../app/contracts';
 import { createScriptedBackend } from '../chat';
+import { createRemoteBackend } from '../chat/remote';
 import type { StopId } from '../content/types';
 import { h, readPixelScale, setHidden } from './dom';
 import { createHud } from './hud/hud';
@@ -27,7 +28,9 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const warp = createWarp();
   const nav = createNavView(content, dispatch);
   const briefing = createBriefingView(content, dispatch);
-  const chat = createChatView(content, dispatch, createScriptedBackend(content.chatTopics, content.chat));
+  const scripted = createScriptedBackend(content.chatTopics, content.chat);
+  const remoteChat = content.stops.some((s) => s.experiences.some((x) => x.kind === 'chat' && x.backend === 'remote'));
+  const chat = createChatView(content, dispatch, remoteChat ? createRemoteBackend(scripted) : scripted);
   const pause = createPauseView(dispatch);
   const error = createErrorView();
   const attrib = h('a', { class: 'aw-attrib', href: '/page/#credits', text: '© OpenStreetMap · LINZ', 'aria-label': 'Map credits: OpenStreetMap and LINZ' });

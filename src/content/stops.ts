@@ -51,7 +51,7 @@ export const stops: Stop[] = [
     pitch: 'Chat with me, or grab my email and links',
     beacon: { at: { kind: 'landmark', id: 'harbourBridgeTop' }, height: { ref: 'anchor', metres: 6 }, color: 'cream', icon: 'chat', triggerRadius: 200, orbitRadius: 220 },
     briefing: contactPages,
-    experiences: [{ kind: 'briefing' }, { kind: 'chat', topicsId: 'main', backend: 'scripted', status: 'live' }],
+    experiences: [{ kind: 'briefing' }, { kind: 'chat', topicsId: 'main', backend: 'remote', status: 'live' }],
   },
   {
     id: 'offclock',

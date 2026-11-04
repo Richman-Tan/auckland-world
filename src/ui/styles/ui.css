@@ -457,7 +457,7 @@
   .aw-chat__head { gap: calc(var(--u) * 3); padding-bottom: calc(var(--u) * 2); }
   .aw-portrait { width: 54px; height: 60px; }
   .aw-chat__name { font-size: 30px; }
-  .aw-chat__meta span:first-child { display: none; }
+  .aw-chat__meta .aw-briefing__all { display: none; }
   .aw-title { justify-content: flex-start; padding: calc(var(--safe-t) + 28px) calc(var(--safe-r) + 18px) calc(var(--safe-b) + 18px) calc(var(--safe-l) + 18px); }
   .aw-title__scrim { background: linear-gradient(180deg, rgba(6, 18, 22, 0.88) 0%, rgba(6, 18, 22, 0.72) 55%, rgba(6, 18, 22, 0.25) 100%); }
   .aw-title__stops { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -495,7 +495,8 @@
   .aw-title__name { font-size: 56px; }
   .aw-title__foot { position: static; margin-top: calc(var(--u) * 4); }
   .aw-briefing, .aw-chat { top: calc(var(--safe-t) + 6px); bottom: calc(var(--safe-b) + 6px); left: auto; right: calc(var(--safe-r) + 6px); width: min(400px, 52vw); max-height: none; height: auto; }
-  .aw-chat__links, .aw-chat__meta { display: none; }
+  .aw-chat__links, .aw-chat__meta .aw-briefing__all { display: none; }
+  .aw-chat__meta { padding-bottom: calc(var(--u) * 2); }
   .aw-chat__head { padding-top: 0; padding-bottom: calc(var(--u) * 2); }
   .aw-portrait { width: 45px; height: 50px; }
   .aw-chat__name { font-size: 28px; }

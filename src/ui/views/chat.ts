@@ -130,10 +130,11 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
   });
 
   const all = h('a', { class: 'aw-link aw-briefing__all', text: 'Read everything as a page' });
+  const disclosure = h('span', { class: 'aw-chat__disclosure', text: 'Pre-written answers for now' });
   const meta = h(
     'div',
     { class: 'aw-chat__meta' },
-    h('span', { text: 'Pre-written answers for now' }),
+    disclosure,
     all,
     h('span', { class: 'aw-briefing__hint', text: 'Esc to close' }),
   );
@@ -274,6 +275,9 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
       shown = true;
       if (!started) {
         started = true;
+        // Say plainly who writes typed replies. Some still come from the script (job questions, or
+        // whenever the AI is unavailable), hence "may be".
+        void backend.mode?.().then((m) => setText(disclosure, m === 'ai' ? 'Typed replies may be AI-written' : 'Pre-written answers for now'));
         chain(() => say(() => backend.greet(), 450));
       }
     },
