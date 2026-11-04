@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>UI harness</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body { background: linear-gradient(180deg, #3e7f95 0%, #7fb3a9 55%, #f2d6b3 100%); }
+      #scene { position: fixed; inset: 0; width: 100%; height: 100%; }
+      #panel {
+        position: fixed; left: 8px; top: 8px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 4px; max-width: 360px;
+        background: rgba(0,0,0,.7); padding: 6px; font: 11px monospace; color: #fff;
+      }
+      #panel button { font: inherit; padding: 2px 5px; }
+      #panel[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene" tabindex="-1" aria-label="Stand-in for the 3D view"></canvas>
+    <div id="ui"></div>
+    <div id="panel" hidden></div>
+    <script type="module" src="/dev/ui.ts"></script>
+  </body>
+</html>
