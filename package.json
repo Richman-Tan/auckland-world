@@ -1,0 +1,39 @@
+{
+  "name": "auckland-world",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Richman Tan's portfolio: fly a little plane over real Auckland.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p scripts/tsconfig.json",
+    "test": "vitest run",
+    "map:fetch": "tsx scripts/fetch/index.ts",
+    "map:build": "tsx scripts/build/index.ts",
+    "map:check": "tsx scripts/check/map.ts",
+    "map:fake": "tsx scripts/build/fake.ts",
+    "map": "npm run map:fetch && npm run map:build && npm run map:check",
+    "check:bundle": "tsx scripts/check/bundle.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "earcut": "3.2.4",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "@types/node": "22.20.5",
+    "@types/three": "0.187.0",
+    "geotiff": "2.1.3",
+    "lerc": "4.3.0",
+    "proj4": "2.22.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  }
+}

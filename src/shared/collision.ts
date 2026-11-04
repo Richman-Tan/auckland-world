@@ -1,0 +1,271 @@
+/**
+ * What the plane can hit. Pure (no DOM, no three) so the geometry worker, the runtime and the
+ * Node tests (headless autopilot runs on the real grid) all use exactly the same world.
+ *
+ * Two parts:
+ *  - a height grid (default 6 m cells) = max(water level, terrain, building tops), built from the
+ *    shipped terrain and building footprints, so what you see and what you hit never drift apart;
+ *  - analytic colliders for the hand-modelled landmarks (Sky Tower, Harbour Bridge), whose
+ *    dimensions are fixed here and must be matched by the visual models in src/world/landmarks.
+ */
+import {
+  type Bounds,
+  type BuildingsData,
+  type MapMeta,
+  type TerrainGrid,
+  sampleTerrain,
+} from './mapFormat';
+
+export interface CollisionGrid {
+  cols: number;
+  rows: number;
+  cell: number;
+  x0: number;
+  z0: number;
+  /** Solid height per cell in decimetres ASL, row-major north -> south. */
+  data: Int16Array;
+}
+
+export type Collider =
+  | { kind: 'cylinder'; name: string; x: number; z: number; y0: number; y1: number; r: number }
+  /** Oriented box: centre (cx, cz), unit axis (ux, uz) in the xz plane, half-extents hu along it and hv across it. */
+  | {
+      kind: 'box';
+      name: string;
+      cx: number;
+      cz: number;
+      ux: number;
+      uz: number;
+      hu: number;
+      hv: number;
+      y0: number;
+      y1: number;
+    };
+
+export interface WorldQuery {
+  bounds: Bounds;
+  waterLevel: number;
+  /** Visible surface height: terrain, or the water level where terrain is below it. */
+  groundAt(x: number, z: number): number;
+  /** Top of whatever is solid in this 6 m cell (ground, water, buildings). Excludes analytic colliders. */
+  solidAt(x: number, z: number): number;
+  colliders: readonly Collider[];
+  /** First analytic collider a sphere at (x, y, z) with this radius touches, or null. */
+  hitCollider(x: number, y: number, z: number, radius: number): Collider | null;
+}
+
+/* ----------------------------------------------------------- landmark sizes */
+
+/** Sky Tower dimensions in metres above its ground. The visual model must match these. */
+export const SKY_TOWER = {
+  height: 328,
+  legsTop: 40,
+  legsRadius: 16,
+  shaftRadius: 6,
+  shaftTop: 186,
+  podBottom: 182,
+  podTop: 226,
+  podRadius: 20,
+  upperShaftRadius: 4,
+  upperShaftTop: 260,
+  mastRadius: 2,
+} as const;
+
+/** Harbour Bridge cross-section in metres. */
+export const HARBOUR_BRIDGE = {
+  /** Full deck width including the clip-on lanes. */
+  deckHalfWidth: 20,
+  /** Deck slab thickness below the road surface. */
+  deckThickness: 4,
+  /** The steel truss sits on the original central lanes only. */
+  trussHalfWidth: 10,
+  /** A sample counts as truss where topY - deckY exceeds this. */
+  trussMinRise: 4,
+  pierHalfLength: 6,
+  pierHalfWidth: 9,
+  /** Pier positions as fractions along a -> b. Shared by the visual model and the colliders. */
+  pierFractions: [0.08, 0.17, 0.26, 0.36, 0.48, 0.72, 0.86] as readonly number[],
+} as const;
+
+/** Profile value (deckY / topY) at distance s along a -> b, linearly interpolated. */
+export function bridgeProfileAt(profile: readonly number[], step: number, s: number): number {
+  if (profile.length === 0) return 0;
+  const f = Math.min(Math.max(s / step, 0), profile.length - 1);
+  const i = Math.floor(f);
+  const j = Math.min(i + 1, profile.length - 1);
+  return profile[i] + (profile[j] - profile[i]) * (f - i);
+}
+
+export function landmarkColliders(meta: MapMeta): Collider[] {
+  const out: Collider[] = [];
+  const st = meta.landmarks.skyTower;
+  const g = st.groundY;
+  out.push({ kind: 'cylinder', name: 'Sky Tower legs', x: st.x, z: st.z, y0: g - 5, y1: g + SKY_TOWER.legsTop, r: SKY_TOWER.legsRadius });
+  out.push({ kind: 'cylinder', name: 'Sky Tower shaft', x: st.x, z: st.z, y0: g, y1: g + SKY_TOWER.shaftTop, r: SKY_TOWER.shaftRadius });
+  out.push({ kind: 'cylinder', name: 'Sky Tower pod', x: st.x, z: st.z, y0: g + SKY_TOWER.podBottom, y1: g + SKY_TOWER.podTop, r: SKY_TOWER.podRadius });
+  out.push({ kind: 'cylinder', name: 'Sky Tower upper shaft', x: st.x, z: st.z, y0: g + SKY_TOWER.podTop, y1: g + SKY_TOWER.upperShaftTop, r: SKY_TOWER.upperShaftRadius });
+  out.push({ kind: 'cylinder', name: 'Sky Tower mast', x: st.x, z: st.z, y0: g + SKY_TOWER.upperShaftTop, y1: g + SKY_TOWER.height, r: SKY_TOWER.mastRadius });
+
+  const hb = meta.landmarks.harbourBridge;
+  const dx = hb.b.x - hb.a.x;
+  const dz = hb.b.z - hb.a.z;
+  const len = Math.hypot(dx, dz);
+  if (len > 1 && hb.deckY.length > 1) {
+    const ux = dx / len;
+    const uz = dz / len;
+    const n = hb.deckY.length;
+    for (let i = 0; i < n - 1; i++) {
+      const s0 = i * hb.step;
+      const s1 = Math.min((i + 1) * hb.step, len);
+      if (s1 <= s0) break;
+      const sm = (s0 + s1) / 2;
+      const deck = bridgeProfileAt(hb.deckY, hb.step, sm);
+      const top = bridgeProfileAt(hb.topY, hb.step, sm);
+      const cx = hb.a.x + ux * sm;
+      const cz = hb.a.z + uz * sm;
+      const hu = (s1 - s0) / 2 + 0.5;
+      out.push({ kind: 'box', name: 'Harbour Bridge deck', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.deckHalfWidth, y0: deck - HARBOUR_BRIDGE.deckThickness, y1: deck + 1 });
+      if (top - deck > HARBOUR_BRIDGE.trussMinRise) {
+        out.push({ kind: 'box', name: 'Harbour Bridge truss', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.trussHalfWidth, y0: deck + 1, y1: top });
+      }
+    }
+    for (const f of HARBOUR_BRIDGE.pierFractions) {
+      const s = f * len;
+      const deck = bridgeProfileAt(hb.deckY, hb.step, s);
+      out.push({
+        kind: 'box',
+        name: 'Harbour Bridge pier',
+        cx: hb.a.x + ux * s,
+        cz: hb.a.z + uz * s,
+        ux,
+        uz,
+        hu: HARBOUR_BRIDGE.pierHalfLength,
+        hv: HARBOUR_BRIDGE.pierHalfWidth,
+        y0: -10,
+        y1: deck - HARBOUR_BRIDGE.deckThickness,
+      });
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------ collision grid */
+
+function pointInRing(xz: ArrayLike<number>, start: number, end: number, px: number, pz: number): boolean {
+  let inside = false;
+  const n = (end - start) / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = xz[start + i * 2];
+    const zi = xz[start + i * 2 + 1];
+    const xj = xz[start + j * 2];
+    const zj = xz[start + j * 2 + 1];
+    if (zi > pz !== zj > pz && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Build the solid-height grid. A cell takes a building's top if the building's outer ring contains
+ * the cell centre or any of four points 1.5 m from it (holes are ignored: courtyards count as solid).
+ */
+export function buildCollisionGrid(
+  terrain: TerrainGrid,
+  buildings: BuildingsData,
+  bounds: Bounds,
+  cell = 6,
+  waterLevel = 0,
+): CollisionGrid {
+  const cols = Math.ceil((bounds.maxX - bounds.minX) / cell);
+  const rows = Math.ceil((bounds.maxZ - bounds.minZ) / cell);
+  const x0 = bounds.minX;
+  const z0 = bounds.minZ;
+  const data = new Int16Array(cols * rows);
+  for (let r = 0; r < rows; r++) {
+    const z = z0 + (r + 0.5) * cell;
+    for (let c = 0; c < cols; c++) {
+      const x = x0 + (c + 0.5) * cell;
+      const h = Math.max(waterLevel, sampleTerrain(terrain, x, z));
+      data[r * cols + c] = Math.round(h * 10);
+    }
+  }
+  const offs = [0, 0, 1.5, 0, -1.5, 0, 0, 1.5, 0, -1.5];
+  const xz = buildings.xz;
+  for (let b = 0; b < buildings.count; b++) {
+    const ring = buildings.buildingRingStart[b];
+    const vs = buildings.ringVertexStart[ring] * 2;
+    const ve = buildings.ringVertexStart[ring + 1] * 2;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let i = vs; i < ve; i += 2) {
+      const x = xz[i];
+      const z = xz[i + 1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+    const top = Math.round(buildings.topY[b] * 10);
+    const c0 = Math.max(0, Math.floor((minX - 1.5 - x0) / cell));
+    const c1 = Math.min(cols - 1, Math.floor((maxX + 1.5 - x0) / cell));
+    const r0 = Math.max(0, Math.floor((minZ - 1.5 - z0) / cell));
+    const r1 = Math.min(rows - 1, Math.floor((maxZ + 1.5 - z0) / cell));
+    for (let r = r0; r <= r1; r++) {
+      const cz = z0 + (r + 0.5) * cell;
+      for (let c = c0; c <= c1; c++) {
+        const idx = r * cols + c;
+        if (data[idx] >= top) continue;
+        const cx = x0 + (c + 0.5) * cell;
+        for (let k = 0; k < offs.length; k += 2) {
+          if (pointInRing(xz, vs, ve, cx + offs[k], cz + offs[k + 1])) {
+            data[idx] = top;
+            break;
+          }
+        }
+      }
+    }
+  }
+  return { cols, rows, cell, x0, z0, data };
+}
+
+function hitsCollider(c: Collider, x: number, y: number, z: number, radius: number): boolean {
+  if (y + radius < c.y0 || y - radius > c.y1) return false;
+  if (c.kind === 'cylinder') {
+    return Math.hypot(x - c.x, z - c.z) < c.r + radius;
+  }
+  const dx = x - c.cx;
+  const dz = z - c.cz;
+  const u = dx * c.ux + dz * c.uz;
+  const v = -dx * c.uz + dz * c.ux;
+  return Math.abs(u) < c.hu + radius && Math.abs(v) < c.hv + radius;
+}
+
+export function createWorldQuery(
+  terrain: TerrainGrid,
+  grid: CollisionGrid,
+  colliders: Collider[],
+  bounds: Bounds,
+  waterLevel = 0,
+): WorldQuery {
+  return {
+    bounds,
+    waterLevel,
+    colliders,
+    groundAt(x, z) {
+      return Math.max(waterLevel, sampleTerrain(terrain, x, z));
+    },
+    solidAt(x, z) {
+      const c = Math.floor((x - grid.x0) / grid.cell);
+      const r = Math.floor((z - grid.z0) / grid.cell);
+      if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) {
+        return Math.max(waterLevel, sampleTerrain(terrain, x, z));
+      }
+      return grid.data[r * grid.cols + c] / 10;
+    },
+    hitCollider(x, y, z, radius) {
+      for (const c of colliders) if (hitsCollider(c, x, y, z, radius)) return c;
+      return null;
+    },
+  };
+}

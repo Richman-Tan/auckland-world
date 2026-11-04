@@ -1,0 +1,176 @@
+/**
+ * The app's state machine. Pure: transition(state, event, ctx) -> next state (or the same object
+ * when the event does not apply). Side effects live in app.ts, which reacts to state changes.
+ * Phase 2 adds { kind: 'room' } and { kind: 'chat' } without touching the existing states.
+ */
+import type { StopId } from '../content/types';
+
+export type AutopilotPhase = 'climb' | 'cruise' | 'descend' | 'arrive';
+
+export type LoadIntent = { mode: 'fly' } | { mode: 'stop'; stop: StopId };
+
+export type AppState =
+  | { kind: 'title' }
+  | { kind: 'loading'; intent: LoadIntent }
+  | { kind: 'flying' }
+  /** Destinations overlay. The simulation is paused while it is open. */
+  | { kind: 'nav'; selected: StopId | null }
+  | { kind: 'autopilot'; target: StopId; phase: AutopilotPhase }
+  /** Reading a stop's briefing; the plane holds an orbit around the beacon. */
+  | { kind: 'briefing'; stop: StopId; page: number; pageCount: number }
+  | { kind: 'paused'; reason: 'menu' | 'hidden'; resumeTo: ActiveState }
+  | { kind: 'error'; reason: 'webgl' | 'load'; message?: string };
+
+export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' }>;
+
+export type AppEvent =
+  | { type: 'FLY' }
+  | { type: 'GO_TO_STOP'; stop: StopId }
+  | { type: 'LOADED' }
+  | { type: 'LOAD_FAILED'; message?: string }
+  | { type: 'NO_WEBGL' }
+  | { type: 'OPEN_NAV' }
+  | { type: 'CLOSE_NAV' }
+  | { type: 'NAV_SELECT'; stop: StopId }
+  /** Engage autopilot to the given stop, or to the nav selection. */
+  | { type: 'ENGAGE'; stop?: StopId }
+  | { type: 'AUTOPILOT_PHASE'; phase: AutopilotPhase }
+  | { type: 'ARRIVED' }
+  /** Any manual flight input during autopilot. */
+  | { type: 'CANCEL_AUTOPILOT' }
+  | { type: 'OPEN_BRIEFING'; stop: StopId }
+  | { type: 'PAGE'; delta: number }
+  | { type: 'PAGE_SET'; page: number }
+  | { type: 'CLOSE_BRIEFING' }
+  /** Esc: close whatever is on top, or open the pause menu while flying. */
+  | { type: 'BACK' }
+  | { type: 'PAUSE'; reason: 'menu' | 'hidden' }
+  | { type: 'RESUME' };
+
+export interface FsmContext {
+  /** Number of briefing pages for a stop (>= 1). */
+  pageCount(stop: StopId): number;
+}
+
+function briefing(stop: StopId, ctx: FsmContext, page = 0): AppState {
+  const pageCount = Math.max(1, ctx.pageCount(stop));
+  return { kind: 'briefing', stop, page: Math.min(Math.max(page, 0), pageCount - 1), pageCount };
+}
+
+function isActive(s: AppState): s is ActiveState {
+  return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing';
+}
+
+export function transition(state: AppState, event: AppEvent, ctx: FsmContext): AppState {
+  // Errors are terminal; the error screen offers the read-as-page link instead.
+  if (state.kind === 'error') return state;
+  if (event.type === 'NO_WEBGL') return { kind: 'error', reason: 'webgl' };
+
+  if (event.type === 'PAUSE') {
+    if (!isActive(state)) return state;
+    return { kind: 'paused', reason: event.reason, resumeTo: state };
+  }
+
+  switch (state.kind) {
+    case 'title':
+      if (event.type === 'FLY') return { kind: 'loading', intent: { mode: 'fly' } };
+      if (event.type === 'GO_TO_STOP') return { kind: 'loading', intent: { mode: 'stop', stop: event.stop } };
+      return state;
+
+    case 'loading':
+      if (event.type === 'LOADED') {
+        return state.intent.mode === 'stop' ? briefing(state.intent.stop, ctx) : { kind: 'flying' };
+      }
+      if (event.type === 'LOAD_FAILED') return { kind: 'error', reason: 'load', message: event.message };
+      return state;
+
+    case 'flying':
+      switch (event.type) {
+        case 'OPEN_NAV':
+          return { kind: 'nav', selected: null };
+        case 'OPEN_BRIEFING':
+        case 'GO_TO_STOP':
+          return briefing(event.stop, ctx);
+        case 'ENGAGE':
+          return event.stop ? { kind: 'autopilot', target: event.stop, phase: 'climb' } : state;
+        case 'BACK':
+          return { kind: 'paused', reason: 'menu', resumeTo: state };
+        default:
+          return state;
+      }
+
+    case 'nav':
+      switch (event.type) {
+        case 'NAV_SELECT':
+          return { kind: 'nav', selected: event.stop };
+        case 'ENGAGE': {
+          const target = event.stop ?? state.selected;
+          return target ? { kind: 'autopilot', target, phase: 'climb' } : state;
+        }
+        case 'GO_TO_STOP':
+          return { kind: 'autopilot', target: event.stop, phase: 'climb' };
+        case 'CLOSE_NAV':
+        case 'OPEN_NAV': // Tab toggles
+        case 'BACK':
+          return { kind: 'flying' };
+        default:
+          return state;
+      }
+
+    case 'autopilot':
+      switch (event.type) {
+        case 'AUTOPILOT_PHASE':
+          return event.phase === state.phase ? state : { ...state, phase: event.phase };
+        case 'ARRIVED':
+          return briefing(state.target, ctx);
+        case 'CANCEL_AUTOPILOT':
+        case 'BACK':
+          return { kind: 'flying' };
+        case 'OPEN_NAV':
+          return { kind: 'nav', selected: state.target };
+        case 'ENGAGE':
+          return event.stop && event.stop !== state.target
+            ? { kind: 'autopilot', target: event.stop, phase: 'climb' }
+            : state;
+        default:
+          return state;
+      }
+
+    case 'briefing':
+      switch (event.type) {
+        case 'PAGE': {
+          const page = Math.min(Math.max(state.page + event.delta, 0), state.pageCount - 1);
+          return page === state.page ? state : { ...state, page };
+        }
+        case 'PAGE_SET': {
+          const page = Math.min(Math.max(event.page, 0), state.pageCount - 1);
+          return page === state.page ? state : { ...state, page };
+        }
+        case 'OPEN_BRIEFING':
+          return event.stop === state.stop ? state : briefing(event.stop, ctx);
+        case 'CLOSE_BRIEFING':
+        case 'BACK':
+          return { kind: 'flying' };
+        case 'OPEN_NAV':
+          return { kind: 'nav', selected: state.stop };
+        case 'ENGAGE':
+          return event.stop && event.stop !== state.stop
+            ? { kind: 'autopilot', target: event.stop, phase: 'climb' }
+            : state;
+        case 'GO_TO_STOP':
+          return event.stop === state.stop ? state : { kind: 'autopilot', target: event.stop, phase: 'climb' };
+        default:
+          return state;
+      }
+
+    case 'paused':
+      if (event.type === 'RESUME') return state.resumeTo;
+      if (event.type === 'BACK' && state.reason === 'menu') return state.resumeTo;
+      return state;
+  }
+}
+
+/** Is the flight simulation stepping in this state? */
+export function simulationRunning(s: AppState): boolean {
+  return s.kind === 'flying' || s.kind === 'autopilot' || s.kind === 'briefing';
+}
