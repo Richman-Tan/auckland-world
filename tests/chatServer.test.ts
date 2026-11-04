@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildSystemPrompt, siteLinks } from '../src/chat/prompt';
 import { CHAT_MODEL, createChatHandler, isSiteOrigin, parseTurns, tidyAnswer } from '../src/chat/server';
 import { content } from '../src/content';
+import { siteModule } from '../scripts/chat/site';
+import { readFileSync } from 'node:fs';
 
 const ORIGIN = 'https://richmantan.vercel.app';
 const okMessage = (text: string, stop = 'end_turn') => ({
@@ -142,5 +144,11 @@ describe('system prompt', () => {
     expect(prompt.length).toBeLessThan(40_000);
     expect(prompt).not.toMatch(/\+?64\s?2\d/);
     expect(prompt).not.toMatch(/\d{1,2}:\d{2}|20\d\d-\d\d-\d\d/);
+  });
+});
+
+describe('generated api/_site.ts', () => {
+  it('matches the current content (run npm run chat:site if this fails)', () => {
+    expect(readFileSync(new URL('../api/_site.ts', import.meta.url), 'utf8')).toBe(siteModule());
   });
 });

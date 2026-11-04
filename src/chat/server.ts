@@ -1,6 +1,6 @@
 /**
- * The /api/chat request handler, written against web-standard Request/Response so it runs on
- * Vercel's Edge runtime and in tests. The Anthropic client is injected; with no client (no API key
+ * The /api/chat request handler, written against web-standard Request/Response so it runs as a
+ * Vercel Node.js function and in tests. It imports only the SDK, so the function needs no bundling. The Anthropic client is injected; with no client (no API key
  * set) the endpoint reports itself disabled and the site falls back to its scripted answers.
  *
  * Spend is bounded three ways: short answers (max_tokens), per-visitor and per-instance rate limits
@@ -150,7 +150,8 @@ export function createChatHandler(deps: ChatHandlerDeps): (req: Request) => Prom
           messages: turns.map((t) => ({ role: t.role, content: t.text })),
         },
         // No retry: the browser gives up at 12 s and shows the scripted answer, so a retry would be spend nobody sees.
-        { timeout: 10_000, maxRetries: 0 },
+        // 9 s also keeps inside the function's 15 s maxDuration (vercel.json).
+        { timeout: 9_000, maxRetries: 0 },
       );
       // Usage only; visitor text is never logged.
       log({

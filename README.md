@@ -30,7 +30,7 @@ See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data 
 - `src/flight/`, `src/input/` flight model, autopilot, orbit, proximity, chase camera, plane, keyboard/mouse/touch
 - `src/ui/` title, HUD, nav, briefing, chat, warp, pause and error views
 - `src/chat/` bridge chat: scripted matching, the AI backend (`remote.ts`), the `/api/chat` handler and its system prompt
-- `api/chat.ts` Vercel Edge function for the AI chat
+- `api/chat.ts` Vercel Node.js function for the AI chat; `api/_site.ts` is its generated prompt (`npm run chat:site`)
 - `src/content/` everything the site says (one source for the 3D view and `/page/`)
 - `src/shared/` binary map formats, collision, palette (shared by the pipeline and the runtime)
 - `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
@@ -38,7 +38,7 @@ See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data 
 
 ## Bridge chat
 
-Suggested questions and job-hunting questions are always answered from `src/content/chat.ts`. Typed questions go to `POST /api/chat`, which asks Claude Haiku 5.5 using a system prompt built only from the site's content (`src/chat/prompt.ts`). If the endpoint is off, rate limited or failing, the chat quietly falls back to the scripted answers, and the panel says which mode it is in.
+Suggested questions and job-hunting questions are always answered from `src/content/chat.ts`. Typed questions go to `POST /api/chat`, which asks Claude Haiku 5.5 using a system prompt built only from the site's content (`src/chat/prompt.ts`, generated into `api/_site.ts` by `npm run chat:site`; a test fails if it is stale, so rerun it after editing content). If the endpoint is off, rate limited or failing, the chat quietly falls back to the scripted answers, and the panel says which mode it is in.
 
 - Set `ANTHROPIC_API_KEY` in the Vercel project's environment variables. Without it, `GET /api/chat` reports `{ "enabled": false }` and everything stays scripted. `npm run dev` has no API, so local dev is always scripted.
 - The hard cost cap is the monthly spend limit on the Anthropic account. The handler also limits each visitor (12 questions per 10 minutes) and each instance (400 per hour), and caps answers at 1024 tokens.
