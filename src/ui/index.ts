@@ -1,9 +1,10 @@
 /**
- * The UI: title, loading, HUD, destinations, briefing, pause and error views, mounted inside
+ * The UI: title, loading, HUD, destinations, briefing, chat, pause and error views, mounted inside
  * opts.root over the canvas. It renders from AppState and dispatches AppEvents on pointer clicks;
  * it never listens to keys and never mutates app state.
  */
 import type { AppState, CreateUi, LoadProgress, PromptInfo, Telemetry, UiApi, UiWorld } from '../app/contracts';
+import { createScriptedBackend } from '../chat';
 import type { StopId } from '../content/types';
 import { h, readPixelScale, setHidden } from './dom';
 import { createHud } from './hud/hud';
@@ -11,6 +12,7 @@ import { createWarp } from './hud/warp';
 import { loadImage } from './minimap';
 import './styles/ui.css';
 import { createBriefingView } from './views/briefing';
+import { createChatView } from './views/chat';
 import { createLoadingView } from './views/loading';
 import { createPauseView, createErrorView } from './views/modals';
 import { createNavView } from './views/nav';
@@ -25,11 +27,12 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const warp = createWarp();
   const nav = createNavView(content, dispatch);
   const briefing = createBriefingView(content, dispatch);
+  const chat = createChatView(content, dispatch, createScriptedBackend(content.chatTopics, content.chat));
   const pause = createPauseView(dispatch);
   const error = createErrorView();
   const attrib = h('a', { class: 'aw-attrib', href: '/page/#credits', text: '© OpenStreetMap · LINZ', 'aria-label': 'Map credits: OpenStreetMap and LINZ' });
 
-  root.replaceChildren(title.el, loading.el, hud.el, warp.el, nav.el, briefing.el, pause.el, error.el, attrib);
+  root.replaceChildren(title.el, loading.el, hud.el, warp.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib);
 
   const stopLabel = (id: StopId | null): string | null => content.stops.find((s) => s.id === id)?.label ?? null;
 
@@ -65,10 +68,11 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     setHidden(error.el, view.kind !== 'error');
     setHidden(nav.el, view.kind !== 'nav');
     setHidden(briefing.el, view.kind !== 'briefing');
+    setHidden(chat.el, view.kind !== 'chat');
     setHidden(pause.el, !menu);
     setHidden(attrib, view.kind === 'title' || view.kind === 'loading' || view.kind === 'error');
 
-    const hudOn = view.kind === 'flying' || view.kind === 'autopilot' || view.kind === 'briefing';
+    const hudOn = view.kind === 'flying' || view.kind === 'autopilot' || view.kind === 'briefing' || view.kind === 'chat';
     hud.setActive(hudOn);
     if (view.kind === 'autopilot') {
       autopilotTarget = view.target;
@@ -85,6 +89,9 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     if (view.kind === 'briefing') briefing.render(view.stop, view.page);
     else briefing.reset();
 
+    if (view.kind === 'chat') chat.open(view.stop);
+    else chat.hide();
+
     if (view.kind === 'error') error.set(view.reason, view.message);
 
     // Move focus into whatever dialog just opened.
@@ -92,6 +99,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     else if (view.kind === 'title') focusOnce('title', title.focusTarget);
     else if (view.kind === 'nav') focusOnce('nav', nav.focusTarget());
     else if (view.kind === 'briefing') focusOnce(`briefing:${view.stop}`, briefing.focusTarget);
+    else if (view.kind === 'chat') focusOnce(`chat:${view.stop}`, chat.focusTarget());
     else if (view.kind === 'error') focusOnce('error', error.focusTarget);
     else {
       if (focusKey && focusKey !== 'scene') pause.reset();

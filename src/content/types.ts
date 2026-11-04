@@ -94,9 +94,33 @@ export interface Profile {
 
 export interface ChatTopic {
   id: string;
+  /** The question as a visitor would ask it; shown on suggestion chips. */
   prompt: string;
   answer: Block[];
+  /** Words and short phrases that route a typed question here (scripted matching). */
+  keywords: string[];
+  /** Topics to suggest next, in order. */
   followUps?: string[];
+  /** Also listed under "Quick answers" on the read-as-page view. */
+  quick?: boolean;
+}
+
+/** Replies that are not about a topic: greetings, thanks, goodbyes. Never carry facts. */
+export interface ChatSmallTalk {
+  id: string;
+  keywords: string[];
+  /** Matched before the topics (otherwise only when no topic matches). */
+  priority?: boolean;
+  answer: Block[];
+}
+
+export interface ChatScript {
+  greeting: Block[];
+  /** Said when a typed question matches nothing. */
+  fallback: Block[];
+  /** Topic ids offered before the first question. */
+  starters: string[];
+  smallTalk: ChatSmallTalk[];
 }
 
 export interface SiteContent {
@@ -104,5 +128,6 @@ export interface SiteContent {
   stops: Stop[];
   spawn: { at: GeoPoint; altitudeAsl: number; headingDeg: number };
   chatTopics: ChatTopic[];
+  chat: ChatScript;
   credits: { label: string; text: string; href?: string }[];
 }

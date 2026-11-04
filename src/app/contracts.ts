@@ -175,8 +175,8 @@ export interface InputSystem {
   /** True if the player is touching any flight control right now (cancels autopilot). */
   hasFlightInput(): boolean;
   onAction(cb: (action: InputAction) => void): () => void;
-  /** 'flight' lets WASD/arrows steer; 'dialog' turns arrows into next/prev and stops steering. */
-  setMode(mode: 'flight' | 'dialog' | 'off'): void;
+  /** 'flight' lets WASD/arrows steer; 'dialog' turns arrows into next/prev and stops steering; 'chat' only listens for Esc. */
+  setMode(mode: 'flight' | 'dialog' | 'chat' | 'off'): void;
   dispose(): void;
 }
 

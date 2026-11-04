@@ -78,8 +78,13 @@ export function startApp(): void {
   const debug = import.meta.env.DEV || params.has('debug');
 
   let state: AppState = { kind: 'title' };
+  const hasChat = (id: StopId) =>
+    !!content.stops.find((s) => s.id === id)?.experiences.some((x) => x.kind === 'chat' && x.status === 'live');
+  /** The stop whose beacon the plane circles: the open briefing or chat. */
+  const holdingAt = (s: AppState): StopId | null => (s.kind === 'briefing' || s.kind === 'chat' ? s.stop : null);
   const fsmCtx = {
     pageCount: (id: StopId) => content.stops.find((s) => s.id === id)?.briefing.length ?? 1,
+    hasChat,
   };
 
   let ui: UiApi;
@@ -119,8 +124,9 @@ export function startApp(): void {
     if (next.kind === 'loading' && loaded) queueMicrotask(() => dispatch({ type: 'LOADED' }));
 
     if (prev.kind === 'loading' && loaded) {
-      if (next.kind === 'briefing') {
-        const stop = placement(next.stop);
+      const held = holdingAt(next);
+      if (held) {
+        const stop = placement(held);
         if (stop) {
           loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
           loaded.camera.snap(loaded.sim.state);
@@ -137,9 +143,10 @@ export function startApp(): void {
     }
     if (next.kind !== 'autopilot') autopilot = null;
 
-    if (next.kind === 'briefing' && loaded) {
-      const stop = placement(next.stop);
-      if (!orbit || prev.kind !== 'briefing' || prev.stop !== next.stop) orbit = stop ? loaded.flight.createOrbit(stop) : null;
+    const held = holdingAt(next);
+    if (held && loaded) {
+      const stop = placement(held);
+      if (!orbit || holdingAt(prev) !== held) orbit = stop ? loaded.flight.createOrbit(stop) : null;
     } else {
       orbit = null;
     }
@@ -149,10 +156,10 @@ export function startApp(): void {
     setInputMode(next);
 
     const active =
-      next.kind === 'nav' ? next.selected : next.kind === 'autopilot' ? next.target : next.kind === 'briefing' ? next.stop : proximityCurrent;
+      next.kind === 'nav' ? next.selected : next.kind === 'autopilot' ? next.target : (holdingAt(next) ?? proximityCurrent);
     loaded?.world.setActiveStop(active);
 
-    if ((prev.kind === 'briefing' || prev.kind === 'nav' || prev.kind === 'paused') && (next.kind === 'flying' || next.kind === 'autopilot')) {
+    if ((prev.kind === 'briefing' || prev.kind === 'chat' || prev.kind === 'nav' || prev.kind === 'paused') && (next.kind === 'flying' || next.kind === 'autopilot')) {
       ui.focusScene();
     }
     updatePrompt();
@@ -164,7 +171,9 @@ export function startApp(): void {
         ? 'flight'
         : s.kind === 'briefing' || s.kind === 'nav' || s.kind === 'paused' || s.kind === 'title'
           ? 'dialog'
-          : 'off',
+          : s.kind === 'chat'
+            ? 'chat'
+            : 'off',
     );
   }
 
@@ -179,7 +188,7 @@ export function startApp(): void {
       stop: stop.id,
       label: stop.label,
       place: stop.place,
-      actions: [{ action: 'briefing', key: 'Space', label: 'Read briefing' }],
+      actions: [{ action: 'briefing', key: 'Space', label: hasChat(stop.id) ? 'Say hello' : 'Read briefing' }],
     };
     ui.setPrompt(prompt);
   }
@@ -209,7 +218,7 @@ export function startApp(): void {
           dispatch({ type: 'OPEN_NAV' });
           dispatch({ type: 'NAV_SELECT', stop: hot });
         } else if (action === 'engage' && navSelected) dispatch({ type: 'ENGAGE', stop: navSelected });
-        else if (action === 'help') ui.toast('WASD or arrows to fly · Shift boost · Tab map · Space read · Esc menu');
+        else if (action === 'help') ui.toast('WASD or arrows to fly · Shift boost · Tab map · Space read or talk · Esc menu');
         break;
       case 'nav':
         if (hot) dispatch({ type: 'NAV_SELECT', stop: hot });
@@ -233,6 +242,9 @@ export function startApp(): void {
         else if (action === 'back' || action === 'briefing') dispatch({ type: 'CLOSE_BRIEFING' });
         else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
         else if (hot) dispatch({ type: 'GO_TO_STOP', stop: hot });
+        break;
+      case 'chat':
+        if (action === 'back') dispatch({ type: 'CLOSE_CHAT' });
         break;
       case 'paused':
         if (action === 'back' || action === 'engage') dispatch({ type: 'RESUME' });
@@ -324,7 +336,7 @@ export function startApp(): void {
 
   function controlsFor(l: Loaded): Controls {
     if (state.kind === 'autopilot' && autopilot) return autopilot.update(l.sim.state, l.world.query);
-    if (state.kind === 'briefing' && orbit) return orbit.update(l.sim.state, l.world.query);
+    if (holdingAt(state) && orbit) return orbit.update(l.sim.state, l.world.query);
     if (state.kind === 'flying' && input) return input.controls();
     return NO_CONTROLS;
   }
@@ -457,7 +469,7 @@ export function startApp(): void {
 
   function targetInfo(l: Loaded, pose: FlightState): TargetInfo | null {
     const id =
-      state.kind === 'autopilot' ? state.target : state.kind === 'briefing' ? state.stop : (navSelected ?? proximityCurrent);
+      state.kind === 'autopilot' ? state.target : (holdingAt(state) ?? navSelected ?? proximityCurrent);
     const stop = id ? placement(id) : null;
     if (!stop) return null;
     const dx = stop.x - pose.pos.x;

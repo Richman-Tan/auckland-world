@@ -3,8 +3,8 @@ import { chatTopics } from './chat';
 import { contactLinks, EMAIL } from './links';
 import type { Block, Page } from './types';
 
-/** "Quick answers" is generated from chatTopics so the page and the Phase 2 chat never drift. */
-const quickAnswerBlocks: Block[] = chatTopics.flatMap((t): Block[] => [
+/** "Quick answers" is generated from the quick chat topics so the page and the chat never drift. */
+const quickAnswerBlocks: Block[] = chatTopics.filter((t) => t.quick).flatMap((t): Block[] => [
   { type: 'text', text: `**${t.prompt}**` },
   ...t.answer,
 ]);

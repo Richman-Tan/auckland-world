@@ -27,7 +27,7 @@ export const stops: Stop[] = [
     label: 'WORK',
     place: 'Ponsonby Road',
     pitch: 'Sandfield, and my earlier internship',
-    // 130 Ponsonby Rd (Sandfield's public address), geocoded from OSM addr:* tags. User to confirm.
+    // 130 Ponsonby Rd (Sandfield's public address, confirmed by the user), geocoded from OSM addr:* tags.
     beacon: { at: { kind: 'geo', lat: -36.856975, lon: 174.747333 }, height: { ref: 'ground', metres: 30 }, color: 'kowhai', icon: 'briefcase', triggerRadius: 180, orbitRadius: 200 },
     briefing: workPages,
     experiences: [{ kind: 'briefing' }, { kind: 'room', roomId: 'office', status: 'planned' }],
@@ -48,10 +48,10 @@ export const stops: Stop[] = [
     hotkey: 4,
     label: 'TALK TO ME',
     place: 'Auckland Harbour Bridge',
-    pitch: 'Email, GitHub, LinkedIn and quick answers',
+    pitch: 'Chat with me, or grab my email and links',
     beacon: { at: { kind: 'landmark', id: 'harbourBridgeTop' }, height: { ref: 'anchor', metres: 6 }, color: 'cream', icon: 'chat', triggerRadius: 200, orbitRadius: 220 },
     briefing: contactPages,
-    experiences: [{ kind: 'briefing' }, { kind: 'chat', topicsId: 'main', backend: 'scripted', status: 'planned' }],
+    experiences: [{ kind: 'briefing' }, { kind: 'chat', topicsId: 'main', backend: 'scripted', status: 'live' }],
   },
   {
     id: 'offclock',

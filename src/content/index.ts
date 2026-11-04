@@ -1,5 +1,5 @@
 /** The site content: one source for the 3D world, the briefings, the read-as-page view and chat. */
-import { chatTopics } from './chat';
+import { chatScript, chatTopics } from './chat';
 import { contactLinks, EMAIL } from './links';
 import { stops } from './stops';
 import type { SiteContent } from './types';
@@ -19,6 +19,7 @@ export const content: SiteContent = {
   // Over Wynyard Quarter, heading for Sky Tower.
   spawn: { at: { lat: -36.8395, lon: 174.759 }, altitudeAsl: 150, headingDeg: 164 },
   chatTopics,
+  chat: chatScript,
   credits: [
     {
       label: 'Map data',

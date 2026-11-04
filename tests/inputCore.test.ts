@@ -85,6 +85,22 @@ describe('input core', () => {
     expect(seen.length).toBe(8);
   });
 
+  it('chat mode: only Esc emits, even from a text field; everything else reaches the page', () => {
+    const { core, seen, press } = setup();
+    core.setMode('chat');
+    expect(press('Tab')).toBe(false);
+    expect(press('Enter')).toBe(false);
+    expect(press('Space')).toBe(false);
+    expect(press('Digit1')).toBe(false);
+    expect(press('KeyD', { editable: true })).toBe(false);
+    expect(seen).toEqual([]);
+    expect(press('Escape', { editable: true, composing: true })).toBe(false);
+    expect(press('Escape', { editable: true })).toBe(true);
+    press('Escape', { repeat: true });
+    expect(seen).toEqual(['back']);
+    expect(core.controls()).toEqual({ turn: 0, pitch: 0, boost: false });
+  });
+
   it('off mode: nothing', () => {
     const { core, seen, press } = setup();
     core.setMode('off');

@@ -13,7 +13,13 @@ const strings = allStrings(content);
 const blob = strings.join('\n');
 
 function allBlocks(): Block[] {
-  return [...content.stops.flatMap((s) => s.briefing.flatMap((p) => p.blocks)), ...content.chatTopics.flatMap((t) => t.answer)];
+  return [
+    ...content.stops.flatMap((s) => s.briefing.flatMap((p) => p.blocks)),
+    ...content.chatTopics.flatMap((t) => t.answer),
+    ...content.chat.greeting,
+    ...content.chat.fallback,
+    ...content.chat.smallTalk.flatMap((t) => t.answer),
+  ];
 }
 function allLinks() {
   return [
@@ -120,12 +126,26 @@ describe('media and chat', () => {
       expect(b.media.src).toMatch(/\.webp$/);
     }
   });
-  it('has 4 to 6 quick answers', () => {
-    expect(content.chatTopics.length).toBeGreaterThanOrEqual(4);
-    expect(content.chatTopics.length).toBeLessThanOrEqual(6);
+  it('has 4 to 6 quick answers, all on the page', () => {
+    const quick = content.chatTopics.filter((t) => t.quick);
+    expect(quick.length).toBeGreaterThanOrEqual(4);
+    expect(quick.length).toBeLessThanOrEqual(6);
     const qa = content.stops.find((s) => s.id === 'talk')!.briefing.find((p) => p.id === 'quick-answers')!;
     const text = allStrings(qa.blocks).join('\n');
-    for (const t of content.chatTopics) expect(text).toContain(t.prompt);
+    for (const t of quick) expect(text).toContain(t.prompt);
+  });
+  it('wires the chat script together', () => {
+    const ids = new Set(content.chatTopics.map((t) => t.id));
+    expect(ids.size).toBe(content.chatTopics.length);
+    for (const t of content.chatTopics) {
+      expect(t.keywords.length).toBeGreaterThanOrEqual(3);
+      for (const f of t.followUps ?? []) expect(ids.has(f)).toBe(true);
+    }
+    for (const s of content.chat.starters) expect(ids.has(s)).toBe(true);
+    expect(content.chat.greeting.length).toBeGreaterThan(0);
+    expect(content.chat.fallback.length).toBeGreaterThan(0);
+    const talk = content.stops.find((s) => s.id === 'talk')!;
+    expect(talk.experiences).toContainEqual(expect.objectContaining({ kind: 'chat', status: 'live' }));
   });
   it('has credits', () => {
     const t = content.credits.map((c) => c.text).join(' ');

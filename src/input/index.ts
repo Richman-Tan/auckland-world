@@ -18,6 +18,7 @@ const toKey = (e: KeyboardEvent): KeyLike => ({
   metaKey: e.metaKey,
   altKey: e.altKey,
   editable: isEditable(e.target),
+  composing: e.isComposing,
 });
 
 /**

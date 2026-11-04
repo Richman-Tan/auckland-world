@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type AppState, simulationRunning, transition } from '../src/app/fsm';
 
-const ctx = { pageCount: (s: string) => (s === 'projects' ? 4 : 2) };
+const ctx = { pageCount: (s: string) => (s === 'projects' ? 4 : 2), hasChat: (s: string) => s === 'talk' };
 const run = (s: AppState, ...events: Parameters<typeof transition>[1][]) => events.reduce((st, e) => transition(st, e, ctx), s);
 
 describe('fsm', () => {
@@ -74,5 +74,25 @@ describe('fsm', () => {
     expect(simulationRunning({ kind: 'flying' })).toBe(true);
     expect(simulationRunning({ kind: 'nav', selected: null })).toBe(false);
     expect(simulationRunning({ kind: 'briefing', stop: 'work', page: 0, pageCount: 1 })).toBe(true);
+  });
+  it('a chat stop opens the chat, from every way of arriving', () => {
+    expect(run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'talk' }, { type: 'LOADED' })).toEqual({ kind: 'chat', stop: 'talk' });
+    expect(run({ kind: 'flying' }, { type: 'OPEN_BRIEFING', stop: 'talk' })).toEqual({ kind: 'chat', stop: 'talk' });
+    expect(run({ kind: 'autopilot', target: 'talk', phase: 'arrive' }, { type: 'ARRIVED' })).toEqual({ kind: 'chat', stop: 'talk' });
+    expect(run({ kind: 'briefing', stop: 'work', page: 1, pageCount: 2 }, { type: 'OPEN_BRIEFING', stop: 'talk' })).toEqual({ kind: 'chat', stop: 'talk' });
+  });
+
+  it('chat closes, pauses, opens the map and flies on', () => {
+    const chat: AppState = { kind: 'chat', stop: 'talk' };
+    expect(run(chat, { type: 'CLOSE_CHAT' })).toEqual({ kind: 'flying' });
+    expect(run(chat, { type: 'BACK' })).toEqual({ kind: 'flying' });
+    expect(run(chat, { type: 'OPEN_NAV' })).toEqual({ kind: 'nav', selected: 'talk' });
+    expect(run(chat, { type: 'GO_TO_STOP', stop: 'work' })).toEqual({ kind: 'autopilot', target: 'work', phase: 'climb' });
+    expect(run(chat, { type: 'GO_TO_STOP', stop: 'talk' })).toBe(chat);
+    expect(run(chat, { type: 'PAGE', delta: 1 })).toBe(chat);
+    const paused = run(chat, { type: 'PAUSE', reason: 'hidden' });
+    expect(paused).toEqual({ kind: 'paused', reason: 'hidden', resumeTo: chat });
+    expect(run(paused, { type: 'RESUME' })).toEqual(chat);
+    expect(simulationRunning(chat)).toBe(true);
   });
 });

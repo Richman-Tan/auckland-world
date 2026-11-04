@@ -10,7 +10,8 @@ import type { Controls, InputAction } from '../app/contracts';
  */
 export const INVERT_PITCH = false;
 
-export type InputMode = 'flight' | 'dialog' | 'off';
+/** 'chat' passes every key through to the page except Esc, which closes the chat even while typing. */
+export type InputMode = 'flight' | 'dialog' | 'chat' | 'off';
 
 export interface KeyLike {
   code: string;
@@ -20,6 +21,8 @@ export interface KeyLike {
   altKey?: boolean;
   /** True when the event target is an input, textarea, select or contenteditable. */
   editable?: boolean;
+  /** True while an IME composition is in progress. */
+  composing?: boolean;
 }
 
 const LEFT = ['KeyA', 'ArrowLeft'];
@@ -125,8 +128,14 @@ export function createInputCore(): InputCore {
       return mode;
     },
     keyDown(e) {
-      if (e.editable || e.ctrlKey || e.metaKey || e.altKey) return false;
+      if (e.ctrlKey || e.metaKey || e.altKey) return false;
       const code = e.code;
+      if (mode === 'chat') {
+        if (code !== 'Escape' || e.repeat || e.composing) return false;
+        emit('back');
+        return true;
+      }
+      if (e.editable) return false;
       down.add(code);
       if (mode === 'off') return false;
       if (mode === 'flight') {

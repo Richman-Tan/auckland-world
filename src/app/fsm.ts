@@ -1,7 +1,7 @@
 /**
  * The app's state machine. Pure: transition(state, event, ctx) -> next state (or the same object
  * when the event does not apply). Side effects live in app.ts, which reacts to state changes.
- * Phase 2 adds { kind: 'room' } and { kind: 'chat' } without touching the existing states.
+ * Stops with a live chat open { kind: 'chat' } where others open a briefing. Rooms come later.
  */
 import type { StopId } from '../content/types';
 
@@ -18,10 +18,12 @@ export type AppState =
   | { kind: 'autopilot'; target: StopId; phase: AutopilotPhase }
   /** Reading a stop's briefing; the plane holds an orbit around the beacon. */
   | { kind: 'briefing'; stop: StopId; page: number; pageCount: number }
+  /** Talking to the avatar at a chat stop; the plane holds an orbit like a briefing. */
+  | { kind: 'chat'; stop: StopId }
   | { kind: 'paused'; reason: 'menu' | 'hidden'; resumeTo: ActiveState }
   | { kind: 'error'; reason: 'webgl' | 'load'; message?: string };
 
-export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' }>;
+export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' | 'chat' }>;
 
 export type AppEvent =
   | { type: 'FLY' }
@@ -42,6 +44,7 @@ export type AppEvent =
   | { type: 'PAGE'; delta: number }
   | { type: 'PAGE_SET'; page: number }
   | { type: 'CLOSE_BRIEFING' }
+  | { type: 'CLOSE_CHAT' }
   /** Esc: close whatever is on top, or open the pause menu while flying. */
   | { type: 'BACK' }
   | { type: 'PAUSE'; reason: 'menu' | 'hidden' }
@@ -50,15 +53,19 @@ export type AppEvent =
 export interface FsmContext {
   /** Number of briefing pages for a stop (>= 1). */
   pageCount(stop: StopId): number;
+  /** True when the stop opens a chat instead of its briefing. */
+  hasChat(stop: StopId): boolean;
 }
 
-function briefing(stop: StopId, ctx: FsmContext, page = 0): AppState {
+/** What arriving at a stop opens: its chat if it has one, else page 0 of its briefing. */
+function arrive(stop: StopId, ctx: FsmContext): AppState {
+  if (ctx.hasChat(stop)) return { kind: 'chat', stop };
   const pageCount = Math.max(1, ctx.pageCount(stop));
-  return { kind: 'briefing', stop, page: Math.min(Math.max(page, 0), pageCount - 1), pageCount };
+  return { kind: 'briefing', stop, page: 0, pageCount };
 }
 
 function isActive(s: AppState): s is ActiveState {
-  return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing';
+  return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing' || s.kind === 'chat';
 }
 
 export function transition(state: AppState, event: AppEvent, ctx: FsmContext): AppState {
@@ -79,7 +86,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
 
     case 'loading':
       if (event.type === 'LOADED') {
-        return state.intent.mode === 'stop' ? briefing(state.intent.stop, ctx) : { kind: 'flying' };
+        return state.intent.mode === 'stop' ? arrive(state.intent.stop, ctx) : { kind: 'flying' };
       }
       if (event.type === 'LOAD_FAILED') return { kind: 'error', reason: 'load', message: event.message };
       return state;
@@ -90,7 +97,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
           return { kind: 'nav', selected: null };
         case 'OPEN_BRIEFING':
         case 'GO_TO_STOP':
-          return briefing(event.stop, ctx);
+          return arrive(event.stop, ctx);
         case 'ENGAGE':
           return event.stop ? { kind: 'autopilot', target: event.stop, phase: 'climb' } : state;
         case 'BACK':
@@ -122,7 +129,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
         case 'AUTOPILOT_PHASE':
           return event.phase === state.phase ? state : { ...state, phase: event.phase };
         case 'ARRIVED':
-          return briefing(state.target, ctx);
+          return arrive(state.target, ctx);
         case 'CANCEL_AUTOPILOT':
         case 'BACK':
           return { kind: 'flying' };
@@ -147,7 +154,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
           return page === state.page ? state : { ...state, page };
         }
         case 'OPEN_BRIEFING':
-          return event.stop === state.stop ? state : briefing(event.stop, ctx);
+          return event.stop === state.stop ? state : arrive(event.stop, ctx);
         case 'CLOSE_BRIEFING':
         case 'BACK':
           return { kind: 'flying' };
@@ -163,6 +170,24 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
           return state;
       }
 
+    case 'chat':
+      switch (event.type) {
+        case 'CLOSE_CHAT':
+        case 'BACK':
+          return { kind: 'flying' };
+        case 'OPEN_BRIEFING':
+          return event.stop === state.stop ? state : arrive(event.stop, ctx);
+        case 'OPEN_NAV':
+          return { kind: 'nav', selected: state.stop };
+        case 'ENGAGE':
+        case 'GO_TO_STOP':
+          return event.stop && event.stop !== state.stop
+            ? { kind: 'autopilot', target: event.stop, phase: 'climb' }
+            : state;
+        default:
+          return state;
+      }
+
     case 'paused':
       if (event.type === 'RESUME') return state.resumeTo;
       if (event.type === 'BACK' && state.reason === 'menu') return state.resumeTo;
@@ -172,5 +197,5 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
 
 /** Is the flight simulation stepping in this state? */
 export function simulationRunning(s: AppState): boolean {
-  return s.kind === 'flying' || s.kind === 'autopilot' || s.kind === 'briefing';
+  return s.kind === 'flying' || s.kind === 'autopilot' || s.kind === 'briefing' || s.kind === 'chat';
 }
