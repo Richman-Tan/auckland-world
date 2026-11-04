@@ -41,10 +41,13 @@ export const projectPages: Page[] = [
         type: 'text',
         text: 'A web platform, built for the University of Auckland\'s Women in Engineering Academy, that helps high school students explore engineering pathways through a small game. The Academy is a real client with real students. I was **Scrum Master** for a team of 8.',
       },
+      { type: 'media', media: { src: '/media/wie-campus-map.webp', alt: 'The pixel-art Engineering Map: a small campus with Biomedical, WIE Academy, Shop, Courtyard, Civil, Electrical and Software areas to pick from', width: 1000, height: 721, caption: 'The campus map: pick an area to see what is there, then walk to it' } },
       {
         type: 'text',
         text: 'My own work was the **TypeScript migration**, the **campus map and walk scene**, an **arrival-letter cutscene**, **Vercel deploys from CI**, and the **campus shop**.',
       },
+      { type: 'media', media: { src: '/media/wie-arrival-letter.webp', alt: 'A pixel-art pair of paws holding an open envelope with a wax seal and a rolled letter inside', width: 900, height: 753, caption: 'The arrival-letter cutscene that welcomes each new student' } },
+      { type: 'media', media: { src: '/media/wie-campus-shop.webp', alt: 'The pixel-art campus shop: a counter with gems and potions, a rabbit shopkeeper, shelves of jars and hats, and the player cat in front', width: 1100, height: 492, caption: 'The campus shop, where coins earned in the game buy hats and outfits' } },
       { type: 'tags', items: ['React', 'Phaser', 'TypeScript', 'Node / Express', 'Supabase Postgres', 'Payload CMS', 'Vercel'] },
       { type: 'text', text: 'The repository stays private until after exams, so there are no links here yet.' },
     ],
