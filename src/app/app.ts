@@ -3,6 +3,8 @@
  * flight and input (src/flight, src/input) and UI (src/ui) together through src/app/contracts.ts.
  * The title screen and content ship in the entry chunk; three.js and the map load in the background.
  */
+import { applyPixelScale } from '../shared/pixelScale';
+import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
 import type { StopId } from '../content/types';
 import { latLonToLocal } from '../shared/mapFormat';
@@ -35,6 +37,7 @@ const MAX_STEPS_PER_FRAME = 60;
 const STOP_IDS: StopId[] = content.stops.map((s) => s.id);
 
 type FlightModule = typeof import('../flight/index');
+type HoldView = ReturnType<FlightModule['createHoldView']>;
 
 interface Loaded {
   world: WorldScene;
@@ -44,6 +47,8 @@ interface Loaded {
   plane: PlaneModel;
   proximity: Proximity;
   stops: StopPlacement[];
+  /** Wide shot of the landmark while a briefing or chat is open. */
+  hold: HoldView;
 }
 
 function hasWebGL2(): boolean {
@@ -72,6 +77,11 @@ export function startApp(): void {
   const touchRoot = document.createElement('div');
   touchRoot.id = 'touch';
   document.body.append(touchRoot);
+
+  // Size the UI's pixel art now, with the same rule the renderer uses later, so nothing resizes
+  // when the map finishes loading. Registered before the UI's own resize listener.
+  applyPixelScale(innerHeight);
+  addEventListener('resize', () => applyPixelScale(innerHeight));
 
   const params = new URLSearchParams(location.search);
   const baseUrl = params.get('map') === 'fake' ? '/map-fake/' : '/map/';
@@ -294,7 +304,7 @@ export function startApp(): void {
     };
     addEventListener('resize', resize);
     resize();
-    return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops };
+    return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops, hold: flight.createHoldView() };
   }
 
   load().then(
@@ -374,6 +384,10 @@ export function startApp(): void {
     return best ? best.toUpperCase() : null;
   }
 
+  /** Screen area covered by the open panel, refreshed a few times a second for the holding camera. */
+  let cover: Obstruction | null = null;
+  let coverTimer = 0;
+
   function frame(now: number) {
     requestAnimationFrame(frame);
     const l = loaded;
@@ -432,7 +446,15 @@ export function startApp(): void {
       renderPose.heading = lerpAngle(prevPose.heading, l.sim.state.heading, t);
       renderPose.pitch = prevPose.pitch + (l.sim.state.pitch - prevPose.pitch) * t;
       renderPose.bank = prevPose.bank + (l.sim.state.bank - prevPose.bank) * t;
+      l.hold.restore(l.camera.camera);
       l.camera.update(dt, renderPose, l.world.query, warp);
+      coverTimer -= dt;
+      if (coverTimer <= 0) {
+        cover = ui.obstruction();
+        coverTimer = 0.25;
+      }
+      const held = holdingAt(state);
+      l.hold.apply(dt, l.camera.camera, held ? placement(held) : null, l.world.query, cover);
     } else if (state.kind === 'title' || state.kind === 'loading') {
       // Attract mode: a slow orbit around the CBD behind the title screen.
       // Slow orbit around the Sky Tower, framed in the right third so the title card has the left.

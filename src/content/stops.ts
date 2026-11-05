@@ -17,7 +17,9 @@ export const stops: Stop[] = [
     label: 'PROJECTS',
     place: 'Sky Tower',
     pitch: 'Apps, platforms and research I have built',
-    beacon: { at: { kind: 'landmark', id: 'skyTower' }, height: { ref: 'anchor', metres: 4 }, color: 'pohutukawa', icon: 'code', triggerRadius: 220, orbitRadius: 240 },
+    // Anchor is the pod top (226 m); +108 m clears the mast and its aircraft light (about 331 m), so the
+    // icon and light column sit above the antenna instead of on it.
+    beacon: { at: { kind: 'landmark', id: 'skyTower' }, height: { ref: 'anchor', metres: 108 }, color: 'pohutukawa', icon: 'code', triggerRadius: 220, orbitRadius: 240 },
     briefing: projectPages,
     experiences: [{ kind: 'briefing' }, { kind: 'room', roomId: 'skydeck', status: 'planned' }],
   },

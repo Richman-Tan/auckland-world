@@ -39,7 +39,8 @@ function line(m: Mask, x0: number, y0: number, x1: number, y1: number, v = 1) {
   }
 }
 
-function drawGlyph(name: IconName): Mask {
+/** The icon's pixel mask: 0 empty, 1 accent, 2 light. Exported for tests. */
+export function drawGlyph(name: IconName): Mask {
   const m: Mask = new Uint8Array(SIZE * SIZE);
   switch (name) {
     case 'code': {
@@ -86,13 +87,15 @@ function drawGlyph(name: IconName): Mask {
       break;
     }
     case 'peak': {
+      // Main peak (centre x 6) and a smaller one behind it (centre x 11). Both stay inside x 1..14 so
+      // the 1 px outline fits on every side; wider slopes used to run off the canvas and look cut off.
       for (let y = 2; y <= 13; y++) {
-        const hw = Math.floor((y - 2) * 0.65);
+        const hw = Math.floor((y - 2) * 0.46);
         rect(m, 6 - hw, y, 6 + hw, y);
       }
       for (let y = 7; y <= 13; y++) {
-        const hw = Math.floor((y - 7) * 0.7);
-        rect(m, 12 - hw, y, Math.min(14, 12 + hw), y);
+        const hw = Math.floor((y - 7) * 0.6);
+        rect(m, 11 - hw, y, 11 + hw, y);
       }
       rect(m, 5, 2, 7, 2, 2);
       rect(m, 4, 3, 8, 4, 2);

@@ -18,8 +18,8 @@ import type { SharedUniforms } from './uniforms';
 export const BEACON_HEIGHT = 700;
 export const BEACON_RADIUS = 6;
 const RING_RADIUS = 50;
-/** Icon size on screen, in internal pixels (16 texels at 2x). */
-const ICON_PX = 32;
+/** Icon size on screen, in internal pixels: the 16 x 16 icon at 1:1, so every texel stays one crisp pixel. */
+const ICON_PX = 16;
 const ICON_LIFT = 45;
 
 interface Entry {

@@ -4,12 +4,9 @@
  * HUD's pixel art lines up with the 3D layer.
  */
 import { WebGLRenderer } from 'three';
+import { pixelScaleFor } from '../shared/pixelScale';
 
-export const TARGET_HEIGHT = 360;
-
-export function pixelScaleFor(cssHeight: number): number {
-  return Math.max(2, Math.round(cssHeight / TARGET_HEIGHT));
-}
+export { pixelScaleFor, TARGET_HEIGHT } from '../shared/pixelScale';
 
 export class PixelRenderer {
   readonly renderer: WebGLRenderer;

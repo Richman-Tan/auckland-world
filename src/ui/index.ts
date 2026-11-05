@@ -137,6 +137,14 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     setPrompt(p: PromptInfo | null) {
       hud.setPrompt(p);
     },
+    obstruction() {
+      const el = !briefing.el.hidden ? briefing.el : !chat.el.hidden ? chat.el : null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      // Docked on the right (desktop), or a sheet across the bottom (phones).
+      return r.left > innerWidth * 0.3 ? { right: innerWidth - r.left, bottom: 0 } : { right: 0, bottom: Math.max(0, innerHeight - r.top) };
+    },
     focusScene() {
       focusKey = 'scene';
       document.getElementById('scene')?.focus({ preventScroll: true });

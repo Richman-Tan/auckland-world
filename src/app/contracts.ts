@@ -286,6 +286,8 @@ export interface UiApi {
   updateTelemetry(t: Telemetry): void;
   toast(text: string, kind?: 'info' | 'warn'): void;
   setPrompt(p: PromptInfo | null): void;
+  /** Screen area (CSS px) the open briefing or chat covers: docked right, or a bottom sheet. */
+  obstruction(): { right: number; bottom: number } | null;
   /** Return keyboard focus to the scene after a dialog closes. */
   focusScene(): void;
   /** Called once the map has loaded: enables the minimap, radar and nav overlay. */

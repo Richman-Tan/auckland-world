@@ -436,6 +436,7 @@ void main() {
       uPxSize: { value: pxSize },
       uActive: { value: 0 },
     },
-    { transparent: true, depthWrite: false, side: DoubleSide },
+    // Drawn over the scene so a building or hill in front never clips the icon.
+    { transparent: true, depthWrite: false, depthTest: false, side: DoubleSide },
   );
 }
