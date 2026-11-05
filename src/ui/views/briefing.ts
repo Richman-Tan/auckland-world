@@ -24,10 +24,15 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
   const status = h('p', { class: 'aw-sr', 'aria-live': 'polite' });
   const all = h('a', { class: 'aw-link aw-briefing__all', text: 'Read everything as a page' });
   const hintEl = h('span', { class: 'aw-briefing__hint', text: '← → to page · Esc to close' });
+  // Optional action under the pages, e.g. "Visit the Sky Deck" at a stop with a room.
+  const action = h('button', { class: 'aw-btn aw-btn--primary aw-briefing__action', type: 'button', hidden: true });
+  let onAction: (() => void) | null = null;
+  action.addEventListener('click', () => onAction?.());
 
   const foot = h(
     'div',
     { class: 'aw-briefing__foot' },
+    action,
     h('div', { class: 'aw-briefing__nav' }, back, dots, next),
     h('div', { class: 'aw-briefing__meta' }, all, hintEl),
     status,
@@ -81,6 +86,15 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
     },
     reset(): void {
       shown = '';
+    },
+    /** Show an action button (label and handler), or hide it with null. */
+    setAction(a: { label: string; key?: string; run: () => void } | null): void {
+      onAction = a?.run ?? null;
+      action.hidden = !a;
+      if (a) action.replaceChildren(document.createTextNode(a.label), ...(a.key ? [h('span', { class: 'aw-kbd', text: a.key })] : []));
+    },
+    setCloseLabel(text: string): void {
+      x.setAttribute('aria-label', text);
     },
   };
 }

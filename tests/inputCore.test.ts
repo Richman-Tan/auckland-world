@@ -83,6 +83,8 @@ describe('input core', () => {
     press('KeyW');
     press('Space');
     expect(seen.length).toBe(8);
+    press('KeyE');
+    expect(seen.slice(8)).toEqual(['interact']);
   });
 
   it('chat mode: only Esc emits, even from a text field; everything else reaches the page', () => {

@@ -21,7 +21,7 @@ export const stops: Stop[] = [
     // icon and light column sit above the antenna instead of on it.
     beacon: { at: { kind: 'landmark', id: 'skyTower' }, height: { ref: 'anchor', metres: 108 }, color: 'pohutukawa', icon: 'code', triggerRadius: 220, orbitRadius: 240 },
     briefing: projectPages,
-    experiences: [{ kind: 'briefing' }, { kind: 'room', roomId: 'skydeck', status: 'planned' }],
+    experiences: [{ kind: 'briefing' }, { kind: 'room', roomId: 'skydeck', status: 'live', label: 'Sky Deck' }],
   },
   {
     id: 'work',

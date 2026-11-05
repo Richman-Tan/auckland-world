@@ -17,6 +17,7 @@ import { createChatView } from './views/chat';
 import { createLoadingView } from './views/loading';
 import { createPauseView, createErrorView } from './views/modals';
 import { createNavView } from './views/nav';
+import { createRoomView, type RoomSpotInfo } from './views/room';
 import { createTitleView } from './views/title';
 
 export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
@@ -31,11 +32,17 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const scripted = createScriptedBackend(content.chatTopics, content.chat);
   const remoteChat = content.stops.some((s) => s.experiences.some((x) => x.kind === 'chat' && x.backend === 'remote'));
   const chat = createChatView(content, dispatch, remoteChat ? createRemoteBackend(scripted) : scripted);
+  const room = createRoomView(dispatch);
   const pause = createPauseView(dispatch);
   const error = createErrorView();
   const attrib = h('a', { class: 'aw-attrib', href: '/page/#credits', text: '© OpenStreetMap · LINZ', 'aria-label': 'Map credits: OpenStreetMap and LINZ' });
 
-  root.replaceChildren(title.el, loading.el, hud.el, warp.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib);
+  root.replaceChildren(title.el, loading.el, hud.el, warp.el, room.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib, room.fade);
+
+  const roomOf = (id: StopId) =>
+    content.stops.find((s) => s.id === id)?.experiences.find((x) => x.kind === 'room' && x.status === 'live') as
+      | { kind: 'room'; label?: string }
+      | undefined;
 
   const stopLabel = (id: StopId | null): string | null => content.stops.find((s) => s.id === id)?.label ?? null;
 
@@ -60,9 +67,12 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   }
 
   function sync(next: AppState): void {
+    const before: AppState = state.kind === 'paused' ? state.resumeTo : state;
     state = next;
     // 'hidden' pauses (tab hidden) show nothing: keep rendering what was underneath.
     const view: AppState = next.kind === 'paused' ? next.resumeTo : next;
+    // Cut through black when stepping into or out of a room.
+    if ((before.kind === 'room') !== (view.kind === 'room') && before.kind !== 'title' && before.kind !== 'loading') room.flash();
     const menu = next.kind === 'paused' && next.reason === 'menu';
     root.dataset.state = menu ? 'paused' : view.kind;
 
@@ -70,7 +80,11 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     setHidden(loading.el, view.kind !== 'loading');
     setHidden(error.el, view.kind !== 'error');
     setHidden(nav.el, view.kind !== 'nav');
-    setHidden(briefing.el, view.kind !== 'briefing');
+    const panel = view.kind === 'briefing' || (view.kind === 'room' && view.panel !== null);
+    setHidden(briefing.el, !panel);
+    setHidden(room.el, view.kind !== 'room');
+    // With a screen's page open, the walking prompts step aside.
+    room.el.classList.toggle('is-panel', view.kind === 'room' && view.panel !== null);
     setHidden(chat.el, view.kind !== 'chat');
     setHidden(pause.el, !menu);
     setHidden(attrib, view.kind === 'title' || view.kind === 'loading' || view.kind === 'error');
@@ -90,7 +104,19 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     else nav.show(false, null);
 
     if (view.kind === 'briefing') briefing.render(view.stop, view.page);
+    else if (view.kind === 'room' && view.panel !== null) briefing.render(view.stop, view.panel);
     else briefing.reset();
+    const roomHere = view.kind === 'briefing' ? roomOf(view.stop) : undefined;
+    briefing.setAction(
+      roomHere ? { label: `Visit the ${roomHere.label ?? 'room'}`, key: 'E', run: () => dispatch({ type: 'ENTER_ROOM', stop: (view as { stop: StopId }).stop }) } : null,
+    );
+    briefing.setCloseLabel(view.kind === 'room' ? 'Close and keep walking' : 'Close briefing');
+    if (view.kind === 'room') {
+      const stop = content.stops.find((s) => s.id === view.stop);
+      room.setPlace(`${roomOf(view.stop)?.label ?? 'Room'} · ${stop?.place ?? ''}`);
+    } else {
+      room.setSpot(null);
+    }
 
     if (view.kind === 'chat') chat.open(view.stop);
     else chat.hide();
@@ -102,6 +128,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     else if (view.kind === 'title') focusOnce('title', title.focusTarget);
     else if (view.kind === 'nav') focusOnce('nav', nav.focusTarget());
     else if (view.kind === 'briefing') focusOnce(`briefing:${view.stop}`, briefing.focusTarget);
+    else if (view.kind === 'room' && view.panel !== null) focusOnce(`room-panel:${view.stop}`, briefing.focusTarget);
     else if (view.kind === 'chat') focusOnce(`chat:${view.stop}`, chat.focusTarget());
     else if (view.kind === 'error') focusOnce('error', error.focusTarget);
     else {
@@ -136,6 +163,9 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     },
     setPrompt(p: PromptInfo | null) {
       hud.setPrompt(p);
+    },
+    setRoomSpot(s: RoomSpotInfo | null) {
+      room.setSpot(s);
     },
     obstruction() {
       const el = !briefing.el.hidden ? briefing.el : !chat.el.hidden ? chat.el : null;

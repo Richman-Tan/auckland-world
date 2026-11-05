@@ -517,3 +517,37 @@
 .aw-ui .aw-attrib { font-family: var(--sans); font-size: 11px; }
 @media (pointer: fine) { .aw-ui .aw-attrib { right: auto; left: calc(var(--safe-l) + 6px); } }
 @media (pointer: coarse) { .aw-title__hint, .aw-briefing__hint { display: none; } }
+
+/* ------------------------------------------------------------------ rooms */
+.aw-room { position: absolute; inset: 0; pointer-events: none; }
+.aw-room__top {
+  position: absolute; top: calc(var(--safe-t) + 10px); left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.aw-room__label {
+  margin: 0; padding: calc(var(--u) * 1.5) calc(var(--u) * 3); background: var(--panel); color: var(--kowhai);
+  border-left: var(--u) solid var(--pohutukawa); text-transform: uppercase; letter-spacing: 0.12em;
+}
+.aw-room__leave { pointer-events: auto; min-height: 44px; }
+.aw-ui .aw-room__use {
+  position: absolute; left: 50%; bottom: calc(var(--safe-b) + 64px); transform: translateX(-50%);
+  max-width: calc(100vw - 24px); text-transform: uppercase; letter-spacing: 0.06em; font: inherit;
+  padding: calc(var(--u) * 2) calc(var(--u) * 4); border: var(--u) solid var(--kowhai); background: var(--panel); color: var(--cream);
+  cursor: pointer; pointer-events: auto; min-height: 44px; animation: aw-pulse 1.4s steps(2) infinite;
+}
+.aw-room__use b { color: var(--kowhai); font-weight: 400; }
+.aw-room__hint {
+  position: absolute; left: 50%; bottom: calc(var(--safe-b) + 16px); transform: translateX(-50%); margin: 0; white-space: nowrap;
+  color: var(--cream); opacity: 0.8; text-transform: uppercase; letter-spacing: 0.08em; text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
+}
+.aw-room.is-panel .aw-room__use, .aw-room.is-panel .aw-room__hint { display: none; }
+.aw-fade { position: absolute; inset: 0; background: #0b1c20; opacity: 0; pointer-events: none; z-index: 50; }
+.aw-fade.is-on { animation: aw-cut 0.7s steps(6) both; }
+@keyframes aw-cut { from { opacity: 1; } to { opacity: 0; } }
+@media (pointer: coarse) {
+  .aw-room__hint { white-space: normal; text-align: center; width: calc(100vw - 220px); bottom: calc(var(--safe-b) + 12px); }
+  .aw-ui .aw-room__use { bottom: calc(var(--safe-b) + 200px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw-fade.is-on { animation-duration: 0.2s; }
+}

@@ -1,7 +1,8 @@
 /**
  * The app's state machine. Pure: transition(state, event, ctx) -> next state (or the same object
  * when the event does not apply). Side effects live in app.ts, which reacts to state changes.
- * Stops with a live chat open { kind: 'chat' } where others open a briefing. Rooms come later.
+ * Stops with a live chat open { kind: 'chat' } where others open a briefing. Stops with a room can
+ * be landed on ({ kind: 'room' }), where screens open that stop's briefing pages as a panel.
  */
 import type { StopId } from '../content/types';
 
@@ -20,10 +21,12 @@ export type AppState =
   | { kind: 'briefing'; stop: StopId; page: number; pageCount: number }
   /** Talking to the avatar at a chat stop; the plane holds an orbit like a briefing. */
   | { kind: 'chat'; stop: StopId }
+  /** Walking around a stop's room; panel is the briefing page open over it, if any. The plane waits outside. */
+  | { kind: 'room'; stop: StopId; panel: number | null; pageCount: number }
   | { kind: 'paused'; reason: 'menu' | 'hidden'; resumeTo: ActiveState }
   | { kind: 'error'; reason: 'webgl' | 'load'; message?: string };
 
-export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' | 'chat' }>;
+export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' | 'chat' | 'room' }>;
 
 export type AppEvent =
   | { type: 'FLY' }
@@ -45,6 +48,13 @@ export type AppEvent =
   | { type: 'PAGE_SET'; page: number }
   | { type: 'CLOSE_BRIEFING' }
   | { type: 'CLOSE_CHAT' }
+  /** Land on a stop's room (from flying near it, or from its briefing). */
+  | { type: 'ENTER_ROOM'; stop: StopId }
+  | { type: 'LEAVE_ROOM' }
+  /** Open a briefing page over the room (walking up to a screen). */
+  | { type: 'ROOM_PANEL'; page: number }
+  /** Use whatever the walker is facing (tap on the room prompt); handled by the app, not the FSM. */
+  | { type: 'ROOM_USE' }
   /** Esc: close whatever is on top, or open the pause menu while flying. */
   | { type: 'BACK' }
   | { type: 'PAUSE'; reason: 'menu' | 'hidden' }
@@ -55,6 +65,12 @@ export interface FsmContext {
   pageCount(stop: StopId): number;
   /** True when the stop opens a chat instead of its briefing. */
   hasChat(stop: StopId): boolean;
+  /** True when the stop has a room you can land on. */
+  hasRoom(stop: StopId): boolean;
+}
+
+function room(stop: StopId, ctx: FsmContext): AppState {
+  return { kind: 'room', stop, panel: null, pageCount: Math.max(1, ctx.pageCount(stop)) };
 }
 
 /** What arriving at a stop opens: its chat if it has one, else page 0 of its briefing. */
@@ -65,7 +81,7 @@ function arrive(stop: StopId, ctx: FsmContext): AppState {
 }
 
 function isActive(s: AppState): s is ActiveState {
-  return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing' || s.kind === 'chat';
+  return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing' || s.kind === 'chat' || s.kind === 'room';
 }
 
 export function transition(state: AppState, event: AppEvent, ctx: FsmContext): AppState {
@@ -98,6 +114,8 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
         case 'OPEN_BRIEFING':
         case 'GO_TO_STOP':
           return arrive(event.stop, ctx);
+        case 'ENTER_ROOM':
+          return ctx.hasRoom(event.stop) ? room(event.stop, ctx) : state;
         case 'ENGAGE':
           return event.stop ? { kind: 'autopilot', target: event.stop, phase: 'climb' } : state;
         case 'BACK':
@@ -155,6 +173,8 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
         }
         case 'OPEN_BRIEFING':
           return event.stop === state.stop ? state : arrive(event.stop, ctx);
+        case 'ENTER_ROOM':
+          return event.stop === state.stop && ctx.hasRoom(event.stop) ? room(event.stop, ctx) : state;
         case 'CLOSE_BRIEFING':
         case 'BACK':
           return { kind: 'flying' };
@@ -177,6 +197,42 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
           return { kind: 'flying' };
         case 'OPEN_BRIEFING':
           return event.stop === state.stop ? state : arrive(event.stop, ctx);
+        case 'OPEN_NAV':
+          return { kind: 'nav', selected: state.stop };
+        case 'ENGAGE':
+        case 'GO_TO_STOP':
+          return event.stop && event.stop !== state.stop
+            ? { kind: 'autopilot', target: event.stop, phase: 'climb' }
+            : state;
+        default:
+          return state;
+      }
+
+    case 'room':
+      if (state.panel !== null) {
+        switch (event.type) {
+          case 'CLOSE_BRIEFING':
+          case 'BACK':
+            return { ...state, panel: null };
+          case 'PAGE': {
+            const page = Math.min(Math.max(state.panel + event.delta, 0), state.pageCount - 1);
+            return page === state.panel ? state : { ...state, panel: page };
+          }
+          case 'PAGE_SET':
+          case 'ROOM_PANEL': {
+            const page = Math.min(Math.max(event.page, 0), state.pageCount - 1);
+            return page === state.panel ? state : { ...state, panel: page };
+          }
+          default:
+            break;
+        }
+      }
+      switch (event.type) {
+        case 'ROOM_PANEL':
+          return { ...state, panel: Math.min(Math.max(event.page, 0), state.pageCount - 1) };
+        case 'LEAVE_ROOM':
+        case 'BACK':
+          return { kind: 'flying' };
         case 'OPEN_NAV':
           return { kind: 'nav', selected: state.stop };
         case 'ENGAGE':

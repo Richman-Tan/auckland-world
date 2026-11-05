@@ -21,6 +21,7 @@ import type { MapMeta } from '../shared/mapFormat';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
+import { buildSkyDeck } from '../world/landmarks/skyDeck';
 import { buildSkyTower } from '../world/landmarks/skyTower';
 import { Beacons } from './beacons';
 import {
@@ -70,6 +71,7 @@ export class WorldSceneImpl implements WorldScene {
   private rangitotoBase = new Vector3();
   private sky: Mesh;
   private fogFar: number;
+  private skyDeck: Mesh;
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
@@ -142,6 +144,11 @@ export class WorldSceneImpl implements WorldScene {
     const tower = new Mesh(track(buildSkyTower(meta)), lmMat);
     tower.name = 'sky-tower';
     this.scene.add(tower);
+    // The Sky Deck interior, shown only while visiting.
+    this.skyDeck = new Mesh(track(buildSkyDeck(meta)), lmMat);
+    this.skyDeck.name = 'sky-deck';
+    this.skyDeck.visible = false;
+    this.scene.add(this.skyDeck);
     const bridge = new Mesh(track(buildHarbourBridge(meta)), lmMat);
     bridge.name = 'harbour-bridge';
     this.scene.add(bridge);
@@ -177,6 +184,12 @@ export class WorldSceneImpl implements WorldScene {
 
   setActiveStop(id: StopId | null): void {
     this.beacons.setActive(id);
+  }
+
+  /** Inside the Sky Deck: show the room, hide the beacons (their columns run through the tower). */
+  setInterior(on: boolean): void {
+    this.skyDeck.visible = on;
+    this.beacons.group.visible = !on;
   }
 
   update(dt: number, time: number, camera: Camera): void {

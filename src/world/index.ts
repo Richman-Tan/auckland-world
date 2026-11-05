@@ -11,6 +11,8 @@ import type { BuildOutput } from './buildWorld';
 import type { WorkerRequest, WorkerResponse } from './geometry.worker';
 import { ProgressTracker, fetchBytes, fetchMeta } from './loader';
 
+export { createSkyDeck, type SkyDeck } from '../room/skyDeck';
+
 function runWorker(req: WorkerRequest): Promise<BuildOutput> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./geometry.worker.ts', import.meta.url), { type: 'module' });

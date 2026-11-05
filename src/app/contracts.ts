@@ -210,6 +210,8 @@ export interface WorldScene {
   setStops(stops: StopPlacement[]): void;
   /** Highlight the active/selected stop's beacon. */
   setActiveStop(id: StopId | null): void;
+  /** Show the Sky Deck interior (and hide the beacons) while visiting it. */
+  setInterior(on: boolean): void;
   /** Per-frame animation (water, beacons, lights). */
   update(dt: number, time: number, camera: Camera): void;
   render(camera: Camera): void;
@@ -286,6 +288,8 @@ export interface UiApi {
   updateTelemetry(t: Telemetry): void;
   toast(text: string, kind?: 'info' | 'warn'): void;
   setPrompt(p: PromptInfo | null): void;
+  /** What the walker in a room is facing, for the "use" prompt (null hides it). */
+  setRoomSpot(s: { id: string; action: string } | null): void;
   /** Screen area (CSS px) the open briefing or chat covers: docked right, or a bottom sheet. */
   obstruction(): { right: number; bottom: number } | null;
   /** Return keyboard focus to the scene after a dialog closes. */

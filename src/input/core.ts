@@ -43,6 +43,8 @@ const ACTION_KEYS: Record<string, InputAction> = {
   KeyH: 'help',
 };
 const DIALOG_KEYS: Record<string, InputAction> = {
+  // E: land from a briefing at a stop with a room, or close a room's page and keep walking.
+  KeyE: 'interact',
   Tab: 'nav',
   Escape: 'back',
   Enter: 'engage',

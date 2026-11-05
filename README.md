@@ -29,6 +29,7 @@ See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data 
 - `src/world/`, `src/render/` map loading, worker extrusion, low-res renderer, terrain, water, landmarks, beacons
 - `src/flight/`, `src/input/` flight model, autopilot, orbit, proximity, chase camera, plane, keyboard/mouse/touch
 - `src/ui/` title, HUD, nav, briefing, chat, warp, pause and error views
+- `src/room/` the Sky Deck: layout and hotspots, walking, and the runtime (screens, signs, first-person camera); the room's mesh is `src/world/landmarks/skyDeck.ts`
 - `src/chat/` bridge chat: scripted matching, the AI backend (`remote.ts`), the `/api/chat` handler and its system prompt
 - `api/chat.ts` Vercel Node.js function for the AI chat; `api/_site.ts` is its generated prompt (`npm run chat:site`)
 - `src/content/` everything the site says (one source for the 3D view and `/page/`)
@@ -43,6 +44,13 @@ Suggested questions and job-hunting questions are always answered from `src/cont
 - Set `ANTHROPIC_API_KEY` in the Vercel project's environment variables. Without it, `GET /api/chat` reports `{ "enabled": false }` and everything stays scripted. `npm run dev` has no API, so local dev is always scripted.
 - The hard cost cap is the monthly spend limit on the Anthropic account. The handler also limits each visitor (12 questions per 10 minutes) and each instance (400 per hour), and caps answers at 1024 tokens.
 - Vercel logs one line per answer with token usage only; visitor text is never logged.
+
+## Sky Deck
+
+Near the Sky Tower (or from the projects briefing) press E to land inside the pod. Walk with the flight controls; the screens on the core play short muted loops from `public/media/skydeck/`, and facing one shows a prompt that opens that project's briefing page beside it. Esc closes the page, Esc again (or the lift, or Leave) puts you back in the plane on the holding circle.
+
+- Screens, their pages and videos are listed in `SKY_DECK_SPOTS` (`src/room/layout.ts`); a test checks each one points at a real projects page.
+- Nothing for the room is downloaded until the first visit.
 
 ## Map pipeline
 

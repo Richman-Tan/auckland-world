@@ -3,6 +3,7 @@
  * flight and input (src/flight, src/input) and UI (src/ui) together through src/app/contracts.ts.
  * The title screen and content ship in the entry chunk; three.js and the map load in the background.
  */
+import { type Hotspot, SKY_DECK_SPOTS, hotspotPoint } from '../room/layout';
 import { applyPixelScale } from '../shared/pixelScale';
 import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
@@ -38,6 +39,7 @@ const STOP_IDS: StopId[] = content.stops.map((s) => s.id);
 
 type FlightModule = typeof import('../flight/index');
 type HoldView = ReturnType<FlightModule['createHoldView']>;
+type SkyDeck = import('../world/index').SkyDeck;
 
 interface Loaded {
   world: WorldScene;
@@ -49,6 +51,8 @@ interface Loaded {
   stops: StopPlacement[];
   /** Wide shot of the landmark while a briefing or chat is open. */
   hold: HoldView;
+  /** The walkable room in the Sky Tower (screens load on the first visit). */
+  deck: SkyDeck;
 }
 
 function hasWebGL2(): boolean {
@@ -92,10 +96,17 @@ export function startApp(): void {
     !!content.stops.find((s) => s.id === id)?.experiences.some((x) => x.kind === 'chat' && x.status === 'live');
   /** The stop whose beacon the plane circles: the open briefing or chat. */
   const holdingAt = (s: AppState): StopId | null => (s.kind === 'briefing' || s.kind === 'chat' ? s.stop : null);
+  const hasRoom = (id: StopId) =>
+    !!content.stops.find((s) => s.id === id)?.experiences.some((x) => x.kind === 'room' && x.status === 'live');
+  const roomName = (id: StopId) =>
+    (content.stops.find((s) => s.id === id)?.experiences.find((x) => x.kind === 'room') as { label?: string } | undefined)?.label ?? 'room';
   const fsmCtx = {
     pageCount: (id: StopId) => content.stops.find((s) => s.id === id)?.briefing.length ?? 1,
     hasChat,
+    hasRoom,
   };
+  /** The room being shown, including under a pause menu. */
+  const roomView = (s: AppState) => (s.kind === 'room' ? s : s.kind === 'paused' && s.resumeTo.kind === 'room' ? s.resumeTo : null);
 
   let ui: UiApi;
   let loaded: Loaded | null = null;
@@ -111,6 +122,10 @@ export function startApp(): void {
   let failure: string | null = null;
 
   function dispatch(e: AppEvent) {
+    if (e.type === 'ROOM_USE') {
+      useRoomSpot();
+      return;
+    }
     const prev = state;
     const next = transition(prev, e, fsmCtx);
     if (next === prev) return;
@@ -130,8 +145,54 @@ export function startApp(): void {
     return { pos: { x: stop.x, y: stop.orbitY, z: stop.z + stop.orbitRadius }, heading: Math.PI / 2 };
   }
 
+  /** Chase camera straight to the plane, dropping any blend from the holding view. */
+  function snapCamera(l: Loaded) {
+    l.camera.snap(l.sim.state);
+    l.hold.reset(l.camera.camera);
+  }
+
+  let roomSpot: Hotspot | null = null;
+
+  function useRoomSpot() {
+    if (state.kind !== 'room') return;
+    if (state.panel !== null) {
+      dispatch({ type: 'CLOSE_BRIEFING' });
+      return;
+    }
+    if (!roomSpot) return;
+    if (roomSpot.kind === 'lift') {
+      dispatch({ type: 'LEAVE_ROOM' });
+      return;
+    }
+    const roomStop = state.stop;
+    const pages = content.stops.find((s) => s.id === roomStop)?.briefing ?? [];
+    const page = pages.findIndex((p) => p.id === roomSpot?.pageId);
+    if (page >= 0) dispatch({ type: 'ROOM_PANEL', page });
+  }
+
   function onEnter(prev: AppState, next: AppState) {
     if (next.kind === 'loading' && loaded) queueMicrotask(() => dispatch({ type: 'LOADED' }));
+
+    // Into and out of a room: swap the interior in, and on the way out put the plane back on the
+    // stop's holding circle (the lift "returns you to the plane"), before any autopilot starts.
+    const wasRoom = prev.kind === 'room' || (prev.kind === 'paused' && prev.resumeTo.kind === 'room');
+    if (loaded && next.kind === 'room' && !wasRoom) {
+      loaded.world.setInterior(true);
+      loaded.deck.enter();
+      roomSpot = null;
+      deckOffset.x = deckOffset.y = 0;
+      coverTimer = 0;
+    } else if (loaded && wasRoom && next.kind !== 'room' && next.kind !== 'paused') {
+      loaded.world.setInterior(false);
+      loaded.deck.leave();
+      roomSpot = null;
+      ui.setRoomSpot(null);
+      const stop = placement((prev.kind === 'room' ? prev : (prev as { resumeTo: { stop: StopId } }).resumeTo).stop);
+      if (stop) {
+        loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
+        snapCamera(loaded);
+      }
+    }
 
     if (prev.kind === 'loading' && loaded) {
       const held = holdingAt(next);
@@ -139,11 +200,11 @@ export function startApp(): void {
         const stop = placement(held);
         if (stop) {
           loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
-          loaded.camera.snap(loaded.sim.state);
+          snapCamera(loaded);
         }
       } else if (next.kind === 'flying') {
         loaded.sim.reset({ ...spawnPoint(content, loaded.world.meta), speed: 55 });
-        loaded.camera.snap(loaded.sim.state);
+        snapCamera(loaded);
       }
     }
 
@@ -169,16 +230,20 @@ export function startApp(): void {
       next.kind === 'nav' ? next.selected : next.kind === 'autopilot' ? next.target : (holdingAt(next) ?? proximityCurrent);
     loaded?.world.setActiveStop(active);
 
-    if ((prev.kind === 'briefing' || prev.kind === 'chat' || prev.kind === 'nav' || prev.kind === 'paused') && (next.kind === 'flying' || next.kind === 'autopilot')) {
+    if ((prev.kind === 'briefing' || prev.kind === 'chat' || prev.kind === 'nav' || prev.kind === 'paused' || prev.kind === 'room') && (next.kind === 'flying' || next.kind === 'autopilot')) {
       ui.focusScene();
     }
+    // Walking again (just landed, or a screen's panel closed): keys go back to the scene.
+    if (next.kind === 'room' && next.panel === null && !(prev.kind === 'room' && prev.panel === null)) ui.focusScene();
     updatePrompt();
   }
 
   function setInputMode(s: AppState) {
     input?.setMode(
-      s.kind === 'flying' || s.kind === 'autopilot'
+      s.kind === 'flying' || s.kind === 'autopilot' || (s.kind === 'room' && s.panel === null)
         ? 'flight'
+        : s.kind === 'room'
+          ? 'dialog'
         : s.kind === 'briefing' || s.kind === 'nav' || s.kind === 'paused' || s.kind === 'title'
           ? 'dialog'
           : s.kind === 'chat'
@@ -198,7 +263,10 @@ export function startApp(): void {
       stop: stop.id,
       label: stop.label,
       place: stop.place,
-      actions: [{ action: 'briefing', key: 'Space', label: hasChat(stop.id) ? 'Say hello' : 'Read briefing' }],
+      actions: [
+        { action: 'briefing', key: 'Space', label: hasChat(stop.id) ? 'Say hello' : 'Read briefing' },
+        ...(hasRoom(stop.id) ? [{ action: 'interact' as const, key: 'E', label: `Land on the ${roomName(stop.id)}` }] : []),
+      ],
     };
     ui.setPrompt(prompt);
   }
@@ -219,7 +287,10 @@ export function startApp(): void {
         else if (hot) dispatch({ type: 'GO_TO_STOP', stop: hot });
         break;
       case 'flying':
-        if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
+        if (action === 'interact') {
+          if (proximityCurrent && hasRoom(proximityCurrent)) dispatch({ type: 'ENTER_ROOM', stop: proximityCurrent });
+          else if (proximityCurrent) dispatch({ type: 'OPEN_BRIEFING', stop: proximityCurrent });
+        } else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
         else if (action === 'back') dispatch({ type: 'BACK' });
         else if (action === 'briefing') {
           if (proximityCurrent) dispatch({ type: 'OPEN_BRIEFING', stop: proximityCurrent });
@@ -247,7 +318,8 @@ export function startApp(): void {
         else if (hot) dispatch({ type: 'ENGAGE', stop: hot });
         break;
       case 'briefing':
-        if (action === 'next') dispatch({ type: 'PAGE', delta: 1 });
+        if (action === 'interact') dispatch({ type: 'ENTER_ROOM', stop: state.stop });
+        else if (action === 'next') dispatch({ type: 'PAGE', delta: 1 });
         else if (action === 'prev') dispatch({ type: 'PAGE', delta: -1 });
         else if (action === 'back' || action === 'briefing') dispatch({ type: 'CLOSE_BRIEFING' });
         else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
@@ -255,6 +327,17 @@ export function startApp(): void {
         break;
       case 'chat':
         if (action === 'back') dispatch({ type: 'CLOSE_CHAT' });
+        break;
+      case 'room':
+        if (state.panel !== null) {
+          if (action === 'next') dispatch({ type: 'PAGE', delta: 1 });
+          else if (action === 'prev') dispatch({ type: 'PAGE', delta: -1 });
+          else if (action === 'back' || action === 'briefing' || action === 'interact') dispatch({ type: 'CLOSE_BRIEFING' });
+        } else if (action === 'interact' || action === 'briefing') useRoomSpot();
+        else if (action === 'back') dispatch({ type: 'LEAVE_ROOM' });
+        else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
+        else if (hot) dispatch({ type: 'GO_TO_STOP', stop: hot });
+        else if (action === 'help') ui.toast('WASD or arrows to walk · E to use what you face · Esc to leave');
         break;
       case 'paused':
         if (action === 'back' || action === 'engage') dispatch({ type: 'RESUME' });
@@ -279,7 +362,7 @@ export function startApp(): void {
   const quality = detectQuality(params);
 
   async function load(): Promise<Loaded> {
-    const [{ loadWorld }, flight, inputMod] = await Promise.all([
+    const [{ loadWorld, createSkyDeck }, flight, inputMod] = await Promise.all([
       import('../world/index'),
       import('../flight/index'),
       import('../input/index'),
@@ -298,13 +381,16 @@ export function startApp(): void {
     setInputMode(state);
     const minimapUrl = `${baseUrl}${world.meta.minimap.file}`;
     ui.setWorld({ meta: world.meta, stops, minimapUrl });
+    const deck = createSkyDeck(world.meta);
+    world.add(deck.group);
     const resize = () => {
       world.resize(innerWidth, innerHeight);
       camera.setAspect(innerWidth / innerHeight);
+      deck.setAspect(innerWidth / innerHeight);
     };
     addEventListener('resize', resize);
     resize();
-    return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops, hold: flight.createHoldView() };
+    return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops, hold: flight.createHoldView(), deck };
   }
 
   load().then(
@@ -387,6 +473,7 @@ export function startApp(): void {
   /** Screen area covered by the open panel, refreshed a few times a second for the holding camera. */
   let cover: Obstruction | null = null;
   let coverTimer = 0;
+  const deckOffset = { x: 0, y: 0 };
 
   function frame(now: number) {
     requestAnimationFrame(frame);
@@ -397,6 +484,36 @@ export function startApp(): void {
     const time = now / 1000;
     toastCooldown = Math.max(0, toastCooldown - dt);
     let warp = 1;
+
+    const inRoom = roomView(state);
+    if (inRoom) {
+      const walking = state.kind === 'room' && state.panel === null && input;
+      const spot = l.deck.step(dt, walking ? input!.controls() : NO_CONTROLS);
+      if (spot?.id !== roomSpot?.id) {
+        roomSpot = spot;
+        ui.setRoomSpot(spot ? { id: spot.id, action: spot.action } : null);
+      }
+      // With a page open, slide the view into the free part of the screen (beside the docked panel or
+      // above the phone sheet), so the screen you were facing stays visible.
+      coverTimer -= dt;
+      if (coverTimer <= 0) {
+        cover = state.kind === 'room' && state.panel !== null ? ui.obstruction() : null;
+        coverTimer = 0.25;
+      }
+      const ease = 1 - Math.exp(-dt * 6);
+      deckOffset.x += ((cover ? cover.right / 2 : 0) - deckOffset.x) * ease;
+      deckOffset.y += ((cover ? cover.bottom / 2 : 0) - deckOffset.y) * ease;
+      const cam = l.deck.camera;
+      if (Math.abs(deckOffset.x) < 0.5 && Math.abs(deckOffset.y) < 0.5) {
+        if (cam.view?.enabled) cam.clearViewOffset();
+      } else {
+        cam.setViewOffset(innerWidth, innerHeight, deckOffset.x, deckOffset.y, innerWidth, innerHeight);
+      }
+      l.plane.object.visible = false;
+      l.world.update(dt, time, l.deck.camera);
+      l.world.render(l.deck.camera);
+      return;
+    }
 
     if (simulationRunning(state)) {
       if (state.kind === 'autopilot' && input?.hasFlightInput()) dispatch({ type: 'CANCEL_AUTOPILOT' });
@@ -550,7 +667,7 @@ export function startApp(): void {
         const stop = placement(id);
         if (!l || !stop) return false;
         l.sim.reset({ pos: { x: stop.x, y: stop.orbitY, z: stop.z + stop.orbitRadius + 150 }, heading: 0, speed: 45 });
-        l.camera.snap(l.sim.state);
+        snapCamera(l);
         return true;
       },
       teleportLatLon: (lat: number, lon: number, y: number, headingDeg = 0) => {
@@ -558,10 +675,18 @@ export function startApp(): void {
         if (!l) return false;
         const p = latLonToLocal(l.world.meta.geo, lat, lon);
         l.sim.reset({ pos: { x: p.x, y, z: p.z }, heading: (headingDeg * Math.PI) / 180 + l.world.meta.crs.trueNorthAngleRad, speed: 45 });
-        l.camera.snap(l.sim.state);
+        snapCamera(l);
         return true;
       },
       autopilot: (id: StopId) => dispatch({ type: 'ENGAGE', stop: id }),
+      /** In a room: stand in front of a hotspot (by id), facing it. */
+      roomFace: (id: string, out = 2.5) => {
+        const spot = SKY_DECK_SPOTS.find((s) => s.id === id);
+        if (!loaded || !spot) return false;
+        const p = hotspotPoint(spot, out);
+        loaded.deck.place({ x: p.x, z: p.z, yaw: Math.atan2(-p.x, p.z) });
+        return true;
+      },
     };
   }
 }

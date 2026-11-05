@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type AppState, simulationRunning, transition } from '../src/app/fsm';
 
-const ctx = { pageCount: (s: string) => (s === 'projects' ? 4 : 2), hasChat: (s: string) => s === 'talk' };
+const ctx = { pageCount: (s: string) => (s === 'projects' ? 4 : 2), hasChat: (s: string) => s === 'talk', hasRoom: (s: string) => s === 'projects' };
 const run = (s: AppState, ...events: Parameters<typeof transition>[1][]) => events.reduce((st, e) => transition(st, e, ctx), s);
 
 describe('fsm', () => {
@@ -94,5 +94,31 @@ describe('fsm', () => {
     expect(paused).toEqual({ kind: 'paused', reason: 'hidden', resumeTo: chat });
     expect(run(paused, { type: 'RESUME' })).toEqual(chat);
     expect(simulationRunning(chat)).toBe(true);
+  });
+  it('lands on a room from flying or its briefing, and only where there is one', () => {
+    const r = { kind: 'room', stop: 'projects', panel: null, pageCount: 4 };
+    expect(run({ kind: 'flying' }, { type: 'ENTER_ROOM', stop: 'projects' })).toEqual(r);
+    expect(run({ kind: 'briefing', stop: 'projects', page: 2, pageCount: 4 }, { type: 'ENTER_ROOM', stop: 'projects' })).toEqual(r);
+    const f: AppState = { kind: 'flying' };
+    expect(run(f, { type: 'ENTER_ROOM', stop: 'work' })).toBe(f);
+  });
+
+  it('opens screens as panels, pages them, closes them, then leaves', () => {
+    let s: AppState = { kind: 'room', stop: 'projects', panel: null, pageCount: 4 };
+    s = run(s, { type: 'ROOM_PANEL', page: 1 });
+    expect(s).toMatchObject({ kind: 'room', panel: 1 });
+    s = run(s, { type: 'PAGE', delta: 1 });
+    expect(s).toMatchObject({ panel: 2 });
+    s = run(s, { type: 'PAGE', delta: 9 });
+    expect(s).toMatchObject({ panel: 3 });
+    s = run(s, { type: 'BACK' });
+    expect(s).toMatchObject({ kind: 'room', panel: null });
+    expect(simulationRunning(s)).toBe(false);
+    const paused = run(s, { type: 'PAUSE', reason: 'hidden' });
+    expect(run(paused, { type: 'RESUME' })).toEqual(s);
+    expect(run(s, { type: 'OPEN_NAV' })).toEqual({ kind: 'nav', selected: 'projects' });
+    expect(run(s, { type: 'BACK' })).toEqual({ kind: 'flying' });
+    expect(run(s, { type: 'LEAVE_ROOM' })).toEqual({ kind: 'flying' });
+    expect(run({ ...s, panel: 1 } as AppState, { type: 'LEAVE_ROOM' })).toEqual({ kind: 'flying' });
   });
 });

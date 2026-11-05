@@ -52,7 +52,7 @@ export interface Page {
 /** What you can do at a stop. Phase 2 features are added here and nowhere else. */
 export type Experience =
   | { kind: 'briefing' }
-  | { kind: 'room'; roomId: string; status: 'planned' | 'live' }
+  | { kind: 'room'; roomId: string; status: 'planned' | 'live'; /** Shown on buttons and the room overlay. */ label?: string }
   | { kind: 'chat'; topicsId: string; backend: 'scripted' | 'remote'; status: 'planned' | 'live' };
 
 export interface Beacon {

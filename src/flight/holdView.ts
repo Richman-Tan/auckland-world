@@ -109,6 +109,15 @@ export function createHoldView() {
       }
     },
 
+    /** Forget the blend (after a camera snap): the chase camera's own pose is current again. */
+    reset(cam: PerspectiveCamera): void {
+      saved = false;
+      weight = 0;
+      started = false;
+      offX = offY = 0;
+      if (cam.view?.enabled) cam.clearViewOffset();
+    },
+
     /** True while the wide shot is showing at all (for tests and debugging). */
     get weight(): number {
       return weight;
