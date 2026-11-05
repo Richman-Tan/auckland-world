@@ -18,7 +18,7 @@ import {
   VideoTexture,
 } from 'three';
 import type { MapMeta } from '../shared/mapFormat';
-import { type Hotspot, SKY_DECK as D, SKY_DECK_SPOTS, apothem, facetAngle } from './layout';
+import { type Hotspot, LIFT_SIGN, PLATE, SKY_DECK as D, SKY_DECK_SPOTS, apothem, facetAngle } from './layout';
 import { type Walker, hotspotAt, spawnWalker, stepWalker } from './walker';
 
 export interface SkyDeck {
@@ -52,7 +52,15 @@ function textTexture(lines: { text: string; size: number; color: string }[], w: 
   const total = lines.reduce((a, l) => a + l.size, 0);
   let y = (h - total) / 2;
   for (const l of lines) {
-    g.font = `${l.size}px "Jersey 10", ui-monospace, monospace`;
+    // Shrink a line that would run past the edges (long titles), keeping a small margin.
+    let size = l.size;
+    g.font = `${size}px "Jersey 10", ui-monospace, monospace`;
+    const room = w * 0.92;
+    const width = g.measureText(l.text).width;
+    if (width > room) {
+      size = Math.floor((size * room) / width);
+      g.font = `${size}px "Jersey 10", ui-monospace, monospace`;
+    }
     g.fillStyle = l.color;
     g.fillText(l.text, w / 2, y + l.size / 2 + 1);
     y += l.size;
@@ -101,13 +109,14 @@ export function createSkyDeck(meta: MapMeta): SkyDeck {
 
   // Text goes on once the pixel font is ready (first visit).
   const plaques: { facet: number; out: number; y: number; w: number; h: number; px: [number, number]; lines: { text: string; size: number; color: string }[] }[] = [
+    // Text fills most of the plate height so it survives being drawn a few pixels tall.
     ...SKY_DECK_SPOTS.filter((s) => s.kind === 'screen').map((s) => ({
-      facet: s.facet, out: 0.055, y: 0.72, w: 1.7, h: 0.26, px: [208, 32] as [number, number],
-      lines: [{ text: s.title.toUpperCase(), size: 24, color: CREAM }],
+      facet: s.facet, out: 0.055, y: PLATE.y, w: PLATE.width, h: PLATE.height, px: [300, 50] as [number, number],
+      lines: [{ text: s.title.toUpperCase(), size: 44, color: CREAM }],
     })),
     ...SKY_DECK_SPOTS.filter((s) => s.kind === 'lift').map((s) => ({
-      facet: s.facet, out: 0.1, y: 2.95, w: 1.2, h: 0.3, px: [128, 32] as [number, number],
-      lines: [{ text: 'LIFT', size: 24, color: KOWHAI }],
+      facet: s.facet, out: 0.085, y: LIFT_SIGN.y, w: LIFT_SIGN.width, h: LIFT_SIGN.height, px: [180, 50] as [number, number],
+      lines: [{ text: 'LIFT', size: 44, color: KOWHAI }],
     })),
     {
       facet: 1, out: 0.02, y: 2.0, w: 2.6, h: 1.1, px: [208, 88] as [number, number],

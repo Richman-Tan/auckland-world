@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { content } from '../src/content';
 import { SKY_TOWER } from '../src/shared/collision';
-import { SKY_DECK, SKY_DECK_SPOTS, apothem, hotspotPoint } from '../src/room/layout';
+import { LIFT_SIGN, PLATE, SKY_DECK, SKY_DECK_SPOTS, apothem, hotspotPoint } from '../src/room/layout';
 import { WALK, hotspotAt, spawnWalker, stepWalker } from '../src/room/walker';
 
 const r = (w: { x: number; z: number }) => Math.hypot(w.x, w.z);
@@ -16,6 +16,15 @@ describe('sky deck layout', () => {
     expect(SKY_DECK_SPOTS.filter((s) => s.kind === 'lift')).toHaveLength(1);
     expect(new Set(SKY_DECK_SPOTS.map((s) => s.facet)).size).toBe(SKY_DECK_SPOTS.length);
   });
+  it('keeps plates under their screens, on the core facet, and the lift sign under the ceiling', () => {
+    const facetWidth = 2 * SKY_DECK.coreRadius * Math.sin(Math.PI / SKY_DECK.sides);
+    expect(PLATE.width).toBeLessThan(facetWidth);
+    expect(PLATE.y + PLATE.height / 2).toBeLessThan(0.98); // screen bezel starts at 0.98 m
+    expect(PLATE.y - PLATE.height / 2).toBeGreaterThan(0.2);
+    expect(LIFT_SIGN.y - LIFT_SIGN.height / 2).toBeGreaterThan(2.62); // above the lift frame
+    expect(LIFT_SIGN.y + LIFT_SIGN.height / 2).toBeLessThan(SKY_DECK.height - 0.3); // below the header band
+  });
+
   it('fits inside the pod', () => {
     expect(SKY_DECK.windowRadius).toBeLessThan(SKY_TOWER.podRadius);
     expect(SKY_DECK.coreRadius).toBeGreaterThan(SKY_TOWER.shaftRadius);

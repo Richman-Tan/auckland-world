@@ -17,6 +17,14 @@ export const SKY_DECK = {
   eye: 1.62,
 } as const;
 
+/**
+ * Name plates under the screens and the lift sign, in metres (centre height above the floor).
+ * Sized so a title stays readable from across the deck at the world's low render resolution:
+ * a 16-letter title gets about 8 px per letter from 5 m away.
+ */
+export const PLATE = { width: 2.5, height: 0.42, y: 0.64 } as const;
+export const LIFT_SIGN = { width: 1.5, height: 0.42, y: 2.93 } as const;
+
 export type HotspotKind = 'screen' | 'lift';
 
 export interface Hotspot {

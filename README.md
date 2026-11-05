@@ -12,6 +12,7 @@ npm install
 npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to start at a stop, ?debug for window.__aw)
 npm test
 npm run build
+npm run check:bundle  # after a build: the title page and /page/ load no three.js up front, and stay in budget
 ```
 
 ## Map data

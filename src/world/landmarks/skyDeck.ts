@@ -4,7 +4,7 @@
  * back-face culled, so the windows look straight out at the real city.
  */
 import type { BufferGeometry } from 'three';
-import { SKY_DECK as D, SKY_DECK_SPOTS, facetAngle } from '../../room/layout';
+import { LIFT_SIGN, PLATE, SKY_DECK as D, SKY_DECK_SPOTS, facetAngle } from '../../room/layout';
 import type { MapMeta } from '../../shared/mapFormat';
 import { MeshBuilder, type V3 } from './builder';
 
@@ -89,11 +89,13 @@ export function buildSkyDeck(meta: MapMeta): BufferGeometry {
     };
     if (s.kind === 'screen') {
       box(-0.02, 0.07, 1.42, F + 0.98, F + 2.56, BEZEL);
-      box(-0.02, 0.05, 0.9, F + 0.58, F + 0.86, BEZEL); // plaque backing
+      // Plate backing, a little larger than the plate itself.
+      box(-0.02, 0.05, PLATE.width / 2 + 0.06, F + PLATE.y - PLATE.height / 2 - 0.05, F + PLATE.y + PLATE.height / 2 + 0.05, BEZEL);
     } else {
       box(-0.02, 0.08, 1.15, F, F + 2.62, LIFT_FRAME);
       box(0.07, 0.1, 0.95, F, F + 2.45, LIFT);
       box(0.1, 0.11, 0.015, F, F + 2.45, LIFT_FRAME); // door seam
+      box(-0.02, 0.08, LIFT_SIGN.width / 2 + 0.05, F + LIFT_SIGN.y - LIFT_SIGN.height / 2 - 0.04, F + LIFT_SIGN.y + LIFT_SIGN.height / 2 + 0.04, BEZEL);
     }
   }
 
