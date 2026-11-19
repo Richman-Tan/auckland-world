@@ -28,6 +28,7 @@ export function createChaseCamera(): ChaseCamera {
   let aspect = 16 / 9;
   let fov: number = CAMERA.fov;
   let behind: number = CAMERA.behind;
+  let rollScale = 1;
 
   function desired(s: FlightState, dist: number, out: Vector3) {
     const cp = Math.cos(s.pitch * 0.6);
@@ -59,7 +60,7 @@ export function createChaseCamera(): ChaseCamera {
     camera.up.set(0, 1, 0);
     camera.lookAt(look);
     // Roll with the bank (right wing down = clockwise seen from behind = -z rotation).
-    camera.rotateZ(-CAMERA.rollPerBank * s.bank);
+    camera.rotateZ(-CAMERA.rollPerBank * rollScale * s.bank);
   }
 
   return {
@@ -97,7 +98,10 @@ export function createChaseCamera(): ChaseCamera {
         s.pos.y,
         s.pos.z - Math.cos(s.heading) * CAMERA.lookAhead,
       );
-      camera.rotateZ(-CAMERA.rollPerBank * s.bank);
+      camera.rotateZ(-CAMERA.rollPerBank * rollScale * s.bank);
+    },
+    setRollScale(k) {
+      rollScale = Math.min(Math.max(k, 0), 1);
     },
     setAspect(a) {
       aspect = Math.max(0.2, a || 1);

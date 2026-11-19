@@ -116,6 +116,54 @@ describe('input core', () => {
     expect(seen).toEqual(['engage', 'briefing']);
   });
 
+  it('pitch can be inverted at runtime, for keys, drag, touch stick and gamepad together', () => {
+    const core = createInputCore({ invertPitch: true });
+    core.keyDown({ code: 'KeyW' });
+    expect(core.controls().pitch).toBe(1);
+    core.keyUp({ code: 'KeyW' });
+    core.setStick({ x: 0, y: 1 });
+    expect(core.controls().pitch).toBe(-1);
+    core.setStick(null);
+    core.setPad({ x: 0, y: 1, boost: false });
+    expect(core.controls().pitch).toBe(-1);
+    core.setInvertPitch(false);
+    expect(core.controls().pitch).toBe(1);
+    core.setPad(null);
+    core.dragStart(0, 0);
+    core.dragMove(0, 200);
+    expect(core.controls().pitch).toBe(1);
+    core.setInvertPitch(true);
+    expect(core.controls().pitch).toBe(-1);
+  });
+
+  it('a gamepad steers and boosts alongside the keyboard, and only in flight mode', () => {
+    const { core, press } = setup();
+    core.setPad({ x: 0.5, y: -0.25, boost: true });
+    expect(core.controls()).toEqual({ turn: 0.5, pitch: -0.25, boost: true });
+    expect(core.hasFlightInput()).toBe(true);
+    press('KeyD');
+    expect(core.controls().turn).toBe(1);
+    core.setMode('dialog');
+    expect(core.controls()).toEqual({ turn: 0, pitch: 0, boost: false });
+    expect(core.hasFlightInput()).toBe(false);
+    core.setMode('flight');
+    core.setPad(null);
+    expect(core.controls().boost).toBe(false);
+  });
+
+  it('reports mode changes once each (the touch overlay hides outside flight)', () => {
+    const { core } = setup();
+    const seen: string[] = [];
+    const off = core.onMode((m) => seen.push(m));
+    core.setMode('dialog');
+    core.setMode('dialog');
+    core.setMode('chat');
+    core.setMode('flight');
+    off();
+    core.setMode('off');
+    expect(seen).toEqual(['dialog', 'chat', 'flight']);
+  });
+
   it('chat mode: only Esc emits, even from a text field; everything else reaches the page', () => {
     const { core, seen, press } = setup();
     core.setMode('chat');

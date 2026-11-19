@@ -31,6 +31,11 @@ export function createTouchControls(root: HTMLElement, core: InputCore): { dispo
   btns.append(boost, map, read);
   wrap.append(stick, btns);
   root.append(wrap);
+  // The stick and buttons only mean something while flying or walking; over the title screen, a
+  // briefing sheet or the chat they just cover the page (each of those has its own buttons).
+  const showFor = (mode: InputCore['mode']) => (wrap.hidden = mode !== 'flight');
+  showFor(core.mode);
+  const offMode = core.onMode(showFor);
 
   let stickId: number | null = null;
   const place = (e: PointerEvent) => {
@@ -90,6 +95,7 @@ export function createTouchControls(root: HTMLElement, core: InputCore): { dispo
 
   return {
     dispose() {
+      offMode();
       core.setStick(null);
       core.setTouchBoost(false);
       wrap.remove();

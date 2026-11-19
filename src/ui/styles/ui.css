@@ -220,10 +220,23 @@
 .aw-prompt {
   position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%);
   max-width: calc(100vw - 24px); text-align: center; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: calc(var(--u) * 2) calc(var(--u) * 4); border: var(--u) solid var(--kowhai); background: var(--panel); color: var(--cream);
-  cursor: pointer; pointer-events: auto; min-height: 44px; animation: aw-pulse 1.4s steps(2) infinite;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 calc(var(--u) * 3);
+  padding: 0 calc(var(--u) * 4); border: var(--u) solid var(--kowhai); background: var(--panel); color: var(--cream);
+  pointer-events: auto; min-height: 44px; animation: aw-pulse 1.4s steps(2) infinite;
 }
 .aw-prompt b { color: var(--kowhai); font-weight: 400; }
+.aw-ui .aw-prompt__act {
+  appearance: none; background: transparent; border: 0; padding: calc(var(--u) * 2) calc(var(--u) * 2); min-height: 44px;
+  text-transform: inherit; letter-spacing: inherit; cursor: pointer;
+}
+.aw-ui .aw-prompt__act:hover { background: rgba(244, 236, 216, 0.14); }
+/* On a touch screen there are no keys to hint at, and each action should look like the button it is. */
+@media (pointer: coarse) {
+  .aw-prompt { padding: calc(var(--u) * 2) calc(var(--u) * 3); gap: calc(var(--u) * 2) calc(var(--u) * 3); }
+  .aw-prompt__where { flex-basis: 100%; }
+  .aw-prompt__key { display: none; }
+  .aw-ui .aw-prompt__act { border: var(--u) solid var(--kowhai); padding: calc(var(--u) * 2) calc(var(--u) * 4); }
+}
 @keyframes aw-pulse { 50% { border-color: var(--cream); } }
 
 .aw-arrow {
@@ -515,6 +528,8 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-ui *, .aw-ui *::before, .aw-ui *::after { animation: none !important; transition: none !important; }
 }
+/* The same, when the visitor picks Reduced motion in the settings. */
+html[data-motion='reduced'] .aw-ui *, html[data-motion='reduced'] .aw-ui *::before, html[data-motion='reduced'] .aw-ui *::after { animation: none !important; transition: none !important; }
 .aw-ui[data-state='briefing'] .aw-prompt, .aw-ui[data-state='briefing'] .aw-pullup, .aw-ui[data-state='briefing'] .aw-arrow,
 .aw-ui[data-state='chat'] .aw-prompt, .aw-ui[data-state='chat'] .aw-pullup, .aw-ui[data-state='chat'] .aw-arrow { display: none; }
 .aw-ui .aw-briefing__x { font-family: var(--sans); }
@@ -569,3 +584,16 @@
 .aw-ui .aw-briefing__copy { min-height: 44px; padding: 0 calc(var(--u) * 3); font-size: 11px; }
 .aw-ui .aw-briefing__onward, .aw-ui .aw-chat__onward { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left; border-color: var(--accent, var(--cream)); }
 .aw-ui .aw-chat__onward { width: auto; margin: 0 calc(var(--u) * 4) calc(var(--u) * 2); }
+
+/* ---------------------------------------------------------------- settings */
+.aw-settings { display: grid; gap: calc(var(--u) * 3); }
+.aw-settings__row { display: grid; grid-template-columns: 9em 1fr; gap: 4px 8px; align-items: center; }
+.aw-settings__label { color: var(--kowhai); text-transform: uppercase; font-size: 11px; }
+.aw-settings__opts { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.5); }
+.aw-ui .aw-settings__opt { min-height: 40px; padding: calc(var(--u) * 1.5) calc(var(--u) * 3); border-color: var(--line); }
+.aw-ui .aw-settings__opt[aria-pressed='true'] { background: var(--cream); color: var(--ink); border-color: var(--cream); }
+.aw-ui .aw-settings__note { grid-column: 2; font-family: var(--sans); font-size: 12px; line-height: 1.35; color: var(--dim); }
+@media (max-width: 480px) {
+  .aw-settings__row { grid-template-columns: 1fr; }
+  .aw-ui .aw-settings__note { grid-column: 1; }
+}

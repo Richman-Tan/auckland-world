@@ -19,6 +19,7 @@ import type { WorldQuery } from '../shared/collision';
 import type { PaletteKey } from '../shared/palette';
 import type { AppEvent, AppState, AutopilotPhase } from './fsm';
 import type { ProgressView } from './progress';
+import type { SettingsStore } from './settings';
 
 export type { ProgressView } from './progress';
 export type { WorldQuery, Collider, CollisionGrid } from '../shared/collision';
@@ -140,6 +141,8 @@ export interface ChaseCamera {
   /** Snap behind the plane (after spawn/teleport). */
   snap(state: FlightState): void;
   setAspect(aspect: number): void;
+  /** How much the view rolls with the bank: 1 is normal, 0 keeps the horizon level (reduced motion). */
+  setRollScale(scale: number): void;
 }
 
 /** src/flight/plane.ts */
@@ -180,6 +183,9 @@ export interface InputSystem {
   onAction(cb: (action: InputAction) => void): () => void;
   /** 'flight' lets WASD/arrows steer; 'dialog' turns arrows into next/prev and stops steering; 'chat' only listens for Esc. */
   setMode(mode: 'flight' | 'dialog' | 'chat' | 'off'): void;
+  /** Read a connected gamepad. Call once per frame, before controls(). */
+  poll(): void;
+  setInvertPitch(on: boolean): void;
   dispose(): void;
 }
 
@@ -195,7 +201,9 @@ export interface WorldStats {
   pixelScale: number;
 }
 
-export type QualityTier = 'high' | 'low';
+/** The tier decides what is loaded; WorldDetail is adjustable every frame (src/shared/detail.ts). */
+export type { QualityTier, WorldDetail } from '../shared/detail';
+import type { QualityTier, WorldDetail } from '../shared/detail';
 
 export interface LoadProgress {
   loadedBytes: number;
@@ -220,6 +228,8 @@ export interface WorldScene {
   render(camera: Camera): void;
   /** Call on window resize; returns the internal (low-res) size. */
   resize(cssWidth: number, cssHeight: number): { width: number; height: number };
+  /** Change draw distance and render resolution on the fly (the frame-rate governor, or a pinned setting). */
+  setDetail(d: WorldDetail): void;
   /** The browser took the WebGL context away (true) or gave it back (false). Rendering pauses in between. */
   onContextChange(cb: (lost: boolean) => void): void;
   stats(): WorldStats;
@@ -323,6 +333,8 @@ export interface CreateUiOptions {
   root: HTMLElement;
   content: SiteContent;
   dispatch: (e: AppEvent) => void;
+  /** Visitor settings, shown in the pause menu. Optional so harnesses can leave it out. */
+  settings?: SettingsStore;
 }
 
 export type CreateUi = (opts: CreateUiOptions) => UiApi;

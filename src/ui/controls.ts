@@ -9,6 +9,8 @@ export const CONTROLS: { keys: string; does: string }[] = [
   { keys: 'Enter', does: 'Fly me there (autopilot)' },
   { keys: '← → / A D', does: 'Page through a briefing' },
   { keys: 'H', does: 'Show the keys while flying' },
+  { keys: 'N', does: 'Next stop, from a briefing' },
   { keys: 'Esc', does: 'Close, or pause' },
+  { keys: 'Gamepad', does: 'Stick steers · RT boost · A read · X land · B back · Y map · Start pause' },
 ];
 export const CONTROLS_HINT = 'WASD / arrows steer · Shift boost · Tab destinations · Esc pause';

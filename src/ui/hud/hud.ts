@@ -73,14 +73,12 @@ export function createHud(dispatch: (e: AppEvent) => void, now: () => number = (
   const arrowTri = h('div', { class: 'aw-arrow__tri' });
   const arrow = h('div', { class: 'aw-arrow', hidden: true, 'aria-hidden': 'true' }, arrowTri, arrowTxt);
   const toasts = h('div', { class: 'aw-toasts', role: 'status', 'aria-live': 'polite' });
-  const prompt = h('button', { class: 'aw-prompt', type: 'button', hidden: true });
+  // The approach prompt: where you are, and one button per thing you can do there, so each is a
+  // single tap on a phone (the key hints are hidden on touch screens by CSS).
+  const prompt = h('div', { class: 'aw-prompt', role: 'group', hidden: true });
 
   const el = h('div', { class: 'aw-hud', hidden: true }, compassWrap, apChip, deck, pullUp, arrow, prompt, toasts);
 
-  let promptStop: PromptInfo['stop'] | null = null;
-  prompt.addEventListener('click', () => {
-    if (promptStop) dispatch({ type: 'OPEN_BRIEFING', stop: promptStop });
-  });
 
   const cctx = compass.getContext('2d');
   const rctx = radar.getContext('2d');
@@ -162,17 +160,15 @@ export function createHud(dispatch: (e: AppEvent) => void, now: () => number = (
     },
     setPrompt(p) {
       if (!p) {
-        promptStop = null;
         setHidden(prompt, true);
         return;
       }
-      promptStop = p.stop;
-      prompt.replaceChildren();
-      prompt.append(document.createTextNode(`${p.place} · ${p.label} · `));
-      p.actions.forEach((a, i) => {
-        if (i) prompt.append(document.createTextNode('  '));
-        prompt.append(h('b', { text: `[${a.key}]` }), document.createTextNode(` ${a.label}`));
-      });
+      prompt.replaceChildren(h('span', { class: 'aw-prompt__where', text: `${p.place} · ${p.label}` }));
+      for (const a of p.actions) {
+        const b = h('button', { class: 'aw-prompt__act', type: 'button' }, h('b', { class: 'aw-prompt__key', text: `[${a.key}]` }), document.createTextNode(` ${a.label}`));
+        b.addEventListener('click', () => dispatch(a.action === 'interact' ? { type: 'ENTER_ROOM', stop: p.stop } : { type: 'OPEN_BRIEFING', stop: p.stop }));
+        prompt.append(b);
+      }
       prompt.setAttribute('aria-label', `${p.label} at ${p.place}. ${p.actions.map((a) => `${a.key}: ${a.label}`).join('. ')}`);
       setHidden(prompt, false);
     },

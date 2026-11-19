@@ -10,14 +10,13 @@ import { type ChatBackend, type ChatQuestion, type ChatReply, MAX_QUESTION } fro
 import { blocksHtml } from '../../content/renderHtml';
 import type { SiteContent, StopId } from '../../content/types';
 import { ACCENTS } from '../../shared/palette';
-import { h, setText } from '../dom';
+import { h, prefersReducedMotion as reducedMotion, setText } from '../dom';
 import { stopHash } from '../format';
 import { portraitSvg } from '../portrait';
 
 /** Typewriter speed, characters per second. */
 const CPS = 85;
 
-const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
 interface Typing {

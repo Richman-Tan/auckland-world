@@ -1,7 +1,7 @@
 import type { InputAction, InputSystem } from '../app/contracts';
 import { type InputCore, type KeyLike, createInputCore } from './core';
+import { readPad } from './gamepad';
 
-export { INVERT_PITCH } from './core';
 export { createInputCore } from './core';
 
 function isEditable(t: EventTarget | null): boolean {
@@ -36,9 +36,9 @@ const toKey = (e: KeyboardEvent): KeyLike => ({
  * Keyboard, mouse-drag and touch input. Only this module listens to keys.
  * Touch controls are created when the device reports a coarse pointer or on the first touch.
  */
-export function createInput(opts: { canvas: HTMLCanvasElement; touchRoot: HTMLElement }): InputSystem {
+export function createInput(opts: { canvas: HTMLCanvasElement; touchRoot: HTMLElement; invertPitch?: boolean }): InputSystem {
   const { canvas, touchRoot } = opts;
-  const core: InputCore = createInputCore();
+  const core: InputCore = createInputCore({ invertPitch: opts.invertPitch });
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (core.keyDown(toKey(e))) e.preventDefault();
@@ -89,7 +89,34 @@ export function createInput(opts: { canvas: HTMLCanvasElement; touchRoot: HTMLEl
   if (coarse) void mountTouch();
   else window.addEventListener('touchstart', onFirstTouch, { passive: true });
 
+  // Gamepad: nothing is polled until a controller announces itself (which needs a button press).
+  let padIndex: number | null = null;
+  let padPrev: boolean[] = [];
+  const onPadOn = (e: GamepadEvent) => {
+    if (padIndex === null) padIndex = e.gamepad.index;
+  };
+  const onPadOff = (e: GamepadEvent) => {
+    if (e.gamepad.index !== padIndex) return;
+    padIndex = null;
+    padPrev = [];
+    core.setPad(null);
+  };
+  window.addEventListener('gamepadconnected', onPadOn);
+  window.addEventListener('gamepaddisconnected', onPadOff);
+
   return {
+    poll() {
+      if (padIndex === null) return;
+      const pad = navigator.getGamepads?.()[padIndex];
+      if (!pad) return;
+      const r = readPad(pad, padPrev, core.mode);
+      padPrev = r.pressed;
+      core.setPad(r.stick || r.boost ? { x: r.stick?.x ?? 0, y: r.stick?.y ?? 0, boost: r.boost } : null);
+      for (const a of r.actions) core.trigger(a);
+    },
+    setInvertPitch(on: boolean) {
+      core.setInvertPitch(on);
+    },
     controls: () => core.controls(),
     hasFlightInput: () => core.hasFlightInput(),
     onAction(cb: (a: InputAction) => void) {
@@ -104,6 +131,8 @@ export function createInput(opts: { canvas: HTMLCanvasElement; touchRoot: HTMLEl
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('touchstart', onFirstTouch);
+      window.removeEventListener('gamepadconnected', onPadOn);
+      window.removeEventListener('gamepaddisconnected', onPadOff);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

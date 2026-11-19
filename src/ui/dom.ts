@@ -30,6 +30,15 @@ export function setHidden(el: HTMLElement, hidden: boolean): void {
   if (el.hidden !== hidden) el.hidden = hidden;
 }
 
+/**
+ * True when motion should be kept to a minimum: the visitor's device asks for it, or they chose
+ * "Reduced" in the settings (app.ts mirrors that choice onto <html data-motion="reduced">).
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof document !== 'undefined' && document.documentElement.dataset.motion === 'reduced') return true;
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /** The world's integer pixel scale (CSS variable --px, unitless or in px). Default 3. */
 export function readPixelScale(): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue('--px');

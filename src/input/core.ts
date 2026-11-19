@@ -5,10 +5,13 @@
 import type { Controls, InputAction } from '../app/contracts';
 
 /**
- * Set to true to invert the pitch axis (keys, mouse drag and the touch stick together).
- * Default: W / stick-up = nose down, S / stick-down = nose up (flight-yoke style).
+ * Pitch sense. Default (not inverted): W / stick-up = nose down, S / stick-down = nose up, like a
+ * flight yoke. Inverted flips keys, mouse drag, the touch stick and a gamepad together. It is a
+ * visitor setting (src/app/settings.ts), changed at runtime with setInvertPitch.
  */
-export const INVERT_PITCH = false;
+export interface InputCoreOptions {
+  invertPitch?: boolean;
+}
 
 /** 'chat' passes every key through to the page except Esc, which closes the chat even while typing. */
 export type InputMode = 'flight' | 'dialog' | 'chat' | 'off';
@@ -87,6 +90,11 @@ export interface InputCore {
   /** Touch stick, each axis -1..1 (screen y: +1 = down). null releases. */
   setStick(v: { x: number; y: number } | null): void;
   setTouchBoost(on: boolean): void;
+  /** Gamepad stick (already past its own deadzone) and boost. null releases. */
+  setPad(v: { x: number; y: number; boost: boolean } | null): void;
+  setInvertPitch(on: boolean): void;
+  /** Called whenever the mode changes (the touch overlay hides outside flight). */
+  onMode(cb: (mode: InputMode) => void): () => void;
   /** Emit an action as if a key had been pressed (touch buttons). Respects the mode. */
   trigger(action: InputAction): void;
   controls(): Controls;
@@ -94,14 +102,16 @@ export interface InputCore {
   onAction(cb: (a: InputAction) => void): () => void;
 }
 
-export function createInputCore(): InputCore {
+export function createInputCore(opts: InputCoreOptions = {}): InputCore {
   const down = new Set<string>();
   const listeners = new Set<(a: InputAction) => void>();
+  const modeListeners = new Set<(m: InputMode) => void>();
   let mode: InputMode = 'flight';
   let drag: { x0: number; y0: number; x: number; y: number } | null = null;
   let stick: { x: number; y: number } | null = null;
   let touchBoost = false;
-  const sign = INVERT_PITCH ? -1 : 1;
+  let pad: { x: number; y: number; boost: boolean } | null = null;
+  let sign = opts.invertPitch ? -1 : 1;
 
   const emit = (a: InputAction) => {
     for (const cb of [...listeners]) cb(a);
@@ -129,9 +139,9 @@ export function createInputCore(): InputCore {
     const d = dragAxes();
     const s = stickAxes();
     return {
-      turn: clamp1(kTurn + d.turn + s.turn),
-      pitch: clamp1(kPitch + d.pitch + s.pitch),
-      boost: anyDown(BOOST) || touchBoost,
+      turn: clamp1(kTurn + d.turn + s.turn + (pad?.x ?? 0)),
+      pitch: clamp1(kPitch + d.pitch + s.pitch + sign * (pad?.y ?? 0)),
+      boost: anyDown(BOOST) || touchBoost || !!pad?.boost,
     };
   }
 
@@ -182,14 +192,17 @@ export function createInputCore(): InputCore {
       drag = null;
       stick = null;
       touchBoost = false;
+      pad = null;
     },
     setMode(m) {
+      if (m === mode) return;
       mode = m;
       if (m !== 'flight') {
         drag = null;
         stick = null;
         touchBoost = false;
       }
+      for (const cb of [...modeListeners]) cb(m);
     },
     dragStart(x, y) {
       if (mode === 'flight') drag = { x0: x, y0: y, x, y };
@@ -208,6 +221,18 @@ export function createInputCore(): InputCore {
     },
     setTouchBoost(on) {
       touchBoost = mode === 'flight' && on;
+    },
+    setPad(v) {
+      // Polled every frame, so unlike a touch it needs no clearing when the mode changes:
+      // controls() already returns nothing outside flight.
+      pad = v;
+    },
+    setInvertPitch(on) {
+      sign = on ? -1 : 1;
+    },
+    onMode(cb) {
+      modeListeners.add(cb);
+      return () => modeListeners.delete(cb);
     },
     trigger(a) {
       if (mode !== 'off') emit(a);

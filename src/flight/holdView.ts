@@ -31,6 +31,8 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 const SPIN = 0.04;
 
 export function createHoldView() {
+  /** False holds the wide shot still instead of circling the landmark (reduced motion). */
+  let spin = true;
   let weight = 0;
   let azimuth = 0;
   let started = false;
@@ -78,7 +80,7 @@ export function createHoldView() {
           started = true;
         }
         last = stop;
-        azimuth += dt * SPIN;
+        if (spin) azimuth += dt * SPIN;
       }
       if (!last) return;
 
@@ -116,6 +118,10 @@ export function createHoldView() {
       started = false;
       offX = offY = 0;
       if (cam.view?.enabled) cam.clearViewOffset();
+    },
+
+    setSpin(on: boolean): void {
+      spin = on;
     },
 
     /** True while the wide shot is showing at all (for tests and debugging). */

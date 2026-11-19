@@ -47,6 +47,16 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a bui
 - **Progress.** Opening a stop's briefing, chat or room marks it seen. The set is kept in `localStorage` (`aw:progress:v1`) and shown as ticks on the title and the destinations map; the site works the same with storage blocked.
 - **Links.** The address follows what is open (`src/app/route.ts`): `/?stop=projects`, `/?stop=projects&page=wie-academy`, `/?stop=projects&room=skydeck`, `/?stop=talk`. Moving to another stop adds a history entry and a page turn rewrites the current one, so the browser's Back and Forward walk the visit a stop at a time (cutting to the stop rather than flying). "Copy link" in a briefing copies the address, and without WebGL the same link leads to that spot on `/page/`.
 
+## Settings and performance
+
+- **Settings** live in the pause menu (Esc) and are kept in `localStorage` (`aw:settings:v1`, `src/app/settings.ts`): graphics (Auto, Sharp, Fast), which way W or stick-up pitches, and reduced motion.
+- **Two kinds of quality.** The tier (`high` or `low`) decides what is loaded: the ground texture, and whether small buildings are built. It is picked once per visit from `?quality=`, else a pinned graphics setting, else the device (touch or four cores and under means low). Detail is adjusted while running, on a ladder in `src/shared/detail.ts`: first a shorter draw distance, then coarser 3D pixels. The HUD keeps its size throughout, because only the canvas changes scale.
+- **The governor** (`src/app/governor.ts`) drives that ladder when graphics is Auto. It steps down after about three seconds under 45 fps, tries stepping back up after twelve clean seconds, settles on the lower level if that brings the stutter back, and gives the detail back entirely if lowering it made frames no faster (a 30 Hz power-saving mode, say). `window.__aw.info().detail` shows the level.
+- **Reduced motion** (the device preference, or the setting): the title backdrop and the briefing camera hold still, the view does not roll with the bank, and "Fly me there" cuts to the stop instead of time-warping across the city.
+- **Idle.** Under the pause menu the scene is drawn twice and then left alone until something changes.
+- **Gamepad** (standard layout, `src/input/gamepad.ts`): left stick steers, RT or RB boosts, A reads or confirms, X lands, B goes back, Y opens the map, Start pauses, the D-pad pages, LB is next stop.
+- **Touch.** The stick and buttons show only while flying or walking, and each action in the approach prompt is its own button.
+
 ## Keyboard
 
 While flying, the input layer owns the keys (`src/input/core.ts`): WASD or arrows steer, Tab or M opens the destinations map, Space reads, E lands, Esc pauses. In any dialog (title, map, briefing, pause) Tab belongs to the browser so focus can move between the buttons, M still toggles the map, and Enter or Space on a focused button only activates that button.

@@ -14,9 +14,10 @@ import {
   Vector3,
   Vector4,
 } from 'three';
-import type { QualityTier, StopPlacement, WorldScene, WorldStats } from '../app/contracts';
+import type { StopPlacement, WorldDetail, WorldScene, WorldStats } from '../app/contracts';
 import type { StopId } from '../content/types';
 import type { WorldQuery } from '../shared/collision';
+import { FOG_FAR } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
@@ -35,7 +36,7 @@ import {
 import { PixelRenderer } from './pixelRenderer';
 import { type SharedUniforms, createSharedUniforms } from './uniforms';
 
-export const FOG_FAR: Record<QualityTier, number> = { high: 3200, low: 2400 };
+export { FOG_FAR } from '../shared/detail';
 /** Rangitoto is drawn at most this far from the camera (inside the 3500 m far plane), scaled to keep its angular size. */
 const BACKDROP_DISTANCE = 3300;
 
@@ -43,7 +44,7 @@ export interface WorldParts {
   canvas: HTMLCanvasElement;
   meta: MapMeta;
   query: WorldQuery;
-  quality: QualityTier;
+  quality: keyof typeof FOG_FAR;
   ground: Texture;
   built: BuildOutput;
 }
@@ -228,6 +229,16 @@ export class WorldSceneImpl implements WorldScene {
       if (dt > 0) this.fps += (1000 / dt - this.fps) * 0.1;
     }
     this.lastRender = t1;
+  }
+
+  setDetail(d: WorldDetail): void {
+    if (d.fogFar !== this.fogFar) {
+      // Fog distance is also the cull distance (see update), so less is drawn as well as less shown.
+      this.fogFar = d.fogFar;
+      this.shared.uFogFar.value = d.fogFar;
+      this.shared.uFogNear.value = Math.round(d.fogFar * 0.1);
+    }
+    if (d.extraScale !== this.px.extraScale) this.shared.uResY.value = this.px.setExtraScale(d.extraScale).height;
   }
 
   onContextChange(cb: (lost: boolean) => void): void {

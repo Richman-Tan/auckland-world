@@ -4,6 +4,7 @@
  * The title screen and content ship in the entry chunk; three.js and the map load in the background.
  */
 import { type Hotspot, SKY_DECK_SPOTS, hotspotPoint } from '../room/layout';
+import { detailLadder, lowDetailLevel } from '../shared/detail';
 import { applyPixelScale } from '../shared/pixelScale';
 import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
@@ -31,9 +32,11 @@ import type {
 } from './contracts';
 import { NO_CONTROLS } from './contracts';
 import { type AppEvent, type AppState, simulationRunning, transition } from './fsm';
+import { createGovernor } from './governor';
 import { placeStops, spawnPoint } from './placement';
 import { TOUR_ORDER, createProgress, onward } from './progress';
 import { type Route, pageHref, pageIndex, parseRoute, routeOf, routeTitle, samePlace, sameRoute, searchFor } from './route';
+import { type Settings, createSettings } from './settings';
 import { browserStorage } from './storage';
 
 const STEP = 1 / 60;
@@ -69,9 +72,11 @@ function hasWebGL2(): boolean {
   }
 }
 
-function detectQuality(params: URLSearchParams): QualityTier {
+/** What to load: ?quality= for this visit, else a pinned graphics setting, else a guess from the device. */
+function detectQuality(params: URLSearchParams, setting: Settings['graphics']): QualityTier {
   const q = params.get('quality');
   if (q === 'low' || q === 'high') return q;
+  if (setting !== 'auto') return setting;
   const coarse = matchMedia('(pointer: coarse)').matches;
   const cores = navigator.hardwareConcurrency || 4;
   return coarse || cores <= 4 ? 'low' : 'high';
@@ -141,12 +146,30 @@ export function startApp(): void {
     if (failure && state.kind === 'loading') dispatch({ type: 'LOAD_FAILED', message: failure });
   }
 
-  ui = createUi({ root, content, dispatch });
+  const storage = browserStorage();
+  /** Visitor settings (pause menu), remembered between visits. */
+  const settings = createSettings(storage);
+
+  ui = createUi({ root, content, dispatch, settings });
   ui.sync(state);
 
   /** Stops seen so far, remembered between visits: ticks, and where "next stop" leads. */
-  const progress = createProgress(TOUR_ORDER, browserStorage());
+  const progress = createProgress(TOUR_ORDER, storage);
   ui.setProgress(progress);
+
+  /* ------------------------------------------------------------------ motion */
+
+  const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  /** The device asks for less motion, or the visitor chose Reduced. */
+  const reducedMotion = () => settings.get().motion === 'reduced' || motionQuery.matches;
+  function applyMotion() {
+    // CSS animations and the chat's typewriter read this (the media query covers the device's own preference).
+    document.documentElement.dataset.motion = settings.get().motion === 'reduced' ? 'reduced' : '';
+    loaded?.camera.setRollScale(reducedMotion() ? 0 : 1);
+    loaded?.hold.setSpin(!reducedMotion());
+  }
+  motionQuery.addEventListener('change', applyMotion);
+  applyMotion();
 
   /* ------------------------------------------------------- address and history */
 
@@ -281,6 +304,14 @@ export function startApp(): void {
         loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
         snapCamera(loaded);
       }
+    }
+
+    // Reduced motion: no time-warped dash across the city. Cut to the stop instead.
+    if (next.kind === 'autopilot' && reducedMotion()) {
+      const target = next.target;
+      queueMicrotask(() => {
+        if (state.kind === 'autopilot' && state.target === target) dispatch({ type: 'JUMP', stop: target });
+      });
     }
 
     if (next.kind === 'autopilot' && loaded && (prev.kind !== 'autopilot' || prev.target !== next.target)) {
@@ -442,7 +473,40 @@ export function startApp(): void {
     return;
   }
 
-  const quality = detectQuality(params);
+  const quality = detectQuality(params, settings.get().graphics);
+
+  /* ------------------------------------------------------------------ detail */
+
+  // Runtime detail: draw distance and pixel size, stepped down by the governor when frames are slow.
+  const ladder = detailLadder(quality);
+  const governor = createGovernor({ levels: ladder.length });
+  let detailLevel = 0;
+  /** Frames drawn since the pause menu opened; drawing stops after a couple (see frame). */
+  let idleFrames = 0;
+  const redraw = () => {
+    idleFrames = 0;
+  };
+  addEventListener('resize', redraw);
+
+  function setDetailLevel(level: number) {
+    detailLevel = Math.min(Math.max(level, 0), ladder.length - 1);
+    loaded?.world.setDetail(ladder[detailLevel]);
+    redraw();
+  }
+
+  /** Auto hands the level to the governor (starting from full detail); Sharp and Fast pin it. */
+  function applyGraphics() {
+    const g = settings.get().graphics;
+    governor.reset();
+    setDetailLevel(g === 'low' ? lowDetailLevel(ladder) : 0);
+  }
+
+  settings.subscribe((now, before) => {
+    if (now.graphics !== before.graphics) applyGraphics();
+    if (now.motion !== before.motion) applyMotion();
+    if (now.invertPitch !== before.invertPitch) input?.setInvertPitch(now.invertPitch);
+    redraw();
+  });
 
   async function load(): Promise<Loaded> {
     const [{ loadWorld, createSkyDeck }, flight, inputMod] = await Promise.all([
@@ -459,7 +523,7 @@ export function startApp(): void {
     const sim = flight.createFlightSim();
     sim.reset({ ...spawnPoint(content, world.meta), speed: 55 });
     camera.snap(sim.state);
-    input = inputMod.createInput({ canvas, touchRoot });
+    input = inputMod.createInput({ canvas, touchRoot, invertPitch: settings.get().invertPitch });
     input.onAction(onAction);
     setInputMode(state);
     const minimapUrl = `${baseUrl}${world.meta.minimap.file}`;
@@ -487,6 +551,7 @@ export function startApp(): void {
       } else {
         ui.setNotice(null);
         resize();
+        redraw();
       }
     });
     return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops, hold: flight.createHoldView(), deck };
@@ -495,6 +560,8 @@ export function startApp(): void {
   load().then(
     (l) => {
       loaded = l;
+      applyGraphics();
+      applyMotion();
       if (state.kind === 'loading') dispatch({ type: 'LOADED' });
       requestAnimationFrame(frame);
     },
@@ -578,8 +645,22 @@ export function startApp(): void {
     requestAnimationFrame(frame);
     const l = loaded;
     if (!l) return;
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const frameS = (now - last) / 1000;
+    const dt = Math.min(0.1, frameS);
     last = now;
+    input?.poll();
+
+    // Nothing moves under the pause menu: draw a couple of frames to settle, then stop until it
+    // closes (or the window or a setting changes) instead of redrawing a still picture 60 times a second.
+    if (state.kind === 'paused' && state.reason === 'menu') {
+      if (++idleFrames > 2) return;
+    } else idleFrames = 0;
+
+    // The governor only judges frames from the flying view, where the load is.
+    if (settings.get().graphics === 'auto' && simulationRunning(state)) {
+      const level = governor.sample(frameS);
+      if (level !== detailLevel) setDetailLevel(level);
+    }
     const time = now / 1000;
     toastCooldown = Math.max(0, toastCooldown - dt);
     let warp = 1;
@@ -674,7 +755,7 @@ export function startApp(): void {
     } else if (state.kind === 'title' || state.kind === 'loading') {
       // Attract mode: a slow orbit around the CBD behind the title screen.
       // Slow orbit around the Sky Tower, framed in the right third so the title card has the left.
-      attractAngle += dt * 0.03;
+      if (!reducedMotion()) attractAngle += dt * 0.03;
       const st = l.world.meta.landmarks.skyTower;
       const cam = l.camera.camera;
       const radius = 1250;
@@ -758,6 +839,7 @@ export function startApp(): void {
     (window as unknown as { __aw: unknown }).__aw = {
       state: () => state,
       dispatch,
+      settings,
       /** Simulate the browser dropping the WebGL context; restoreContext() hands it back. */
       loseContext: () => {
         loseExt = loaded?.world.renderer.getContext().getExtension('WEBGL_lose_context') ?? loseExt;
@@ -771,7 +853,13 @@ export function startApp(): void {
       info: () => {
         const l = loaded;
         if (!l) return { loaded: false };
-        return { loaded: true, pose: structuredClone(l.sim.state), stats: l.world.stats(), proximity: proximityCurrent };
+        return {
+          loaded: true,
+          pose: structuredClone(l.sim.state),
+          stats: l.world.stats(),
+          proximity: proximityCurrent,
+          detail: { level: detailLevel, ...ladder[detailLevel], governorFps: Math.round(governor.fps), idleFrames },
+        };
       },
       teleport: (id: StopId) => {
         const l = loaded;

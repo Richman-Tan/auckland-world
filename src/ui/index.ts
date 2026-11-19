@@ -21,7 +21,7 @@ import { createNavView } from './views/nav';
 import { createRoomView, type RoomSpotInfo } from './views/room';
 import { createTitleView } from './views/title';
 
-export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
+export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi => {
   root.classList.add('aw-ui');
 
   const title = createTitleView(content, dispatch);
@@ -34,7 +34,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const remoteChat = content.stops.some((s) => s.experiences.some((x) => x.kind === 'chat' && x.backend === 'remote'));
   const chat = createChatView(content, dispatch, remoteChat ? createRemoteBackend(scripted) : scripted);
   const room = createRoomView(dispatch);
-  const pause = createPauseView(dispatch);
+  const pause = createPauseView(dispatch, settings);
   const error = createErrorView();
   const attrib = h('a', { class: 'aw-attrib', href: '/page/#credits', text: '© OpenStreetMap · LINZ', 'aria-label': 'Map credits: OpenStreetMap and LINZ' });
 
