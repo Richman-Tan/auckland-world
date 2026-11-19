@@ -23,3 +23,31 @@ body {
   inset: 0;
   pointer-events: none;
 }
+
+/* JavaScript off: the summary and links from <noscript>, over the empty canvas. The page itself
+   cannot scroll (see body above), so this block scrolls on its own. */
+.aw-noscript {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 32px max(24px, 6vw);
+  color: #f4ecd8;
+  font: 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  touch-action: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.aw-noscript > * {
+  max-width: 40em;
+}
+.aw-noscript a {
+  color: #f2c230;
+}
+.aw-noscript .links {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}

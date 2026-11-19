@@ -3,6 +3,13 @@ import type { Link } from './types';
 
 export const EMAIL = 'richmantan0@gmail.com';
 
+/**
+ * The site's public address, no trailing slash. The canonical links in index.html and
+ * page/index.html, public/sitemap.xml, public/robots.txt and the structured data must all agree
+ * with it (tests/page.test.ts checks that they do).
+ */
+export const SITE_URL = 'https://richmantan.vercel.app';
+
 export const GITHUB = 'https://github.com/Richman-Tan';
 export const LINKEDIN = 'https://www.linkedin.com/in/richman-tan/';
 

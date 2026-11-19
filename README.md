@@ -48,7 +48,8 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 | Pick a stop, then fly there | 1 to 5, then Enter | D-pad, then A | Tap it twice |
 | Page through a briefing | Left and right, or A and D | D-pad | Buttons |
 | Next stop, from a briefing | N | LB | Button |
-| Back, or pause and settings | Esc | B, Start | Buttons |
+| Back | Esc | B | Buttons |
+| Pause menu and settings | Esc while flying | Start | MENU |
 
 The settings (graphics, time of day, sound, pitch direction, reduced motion) are in the pause menu.
 
@@ -136,7 +137,17 @@ Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the ch
 - **Budgets.** At most 60 draw calls and 700,000 triangles in view (about 47 and 585,000 over the CBD), a 250 KB gzip ceiling on the title page's JavaScript with no three.js in it, and 3 MB of map data. `npm run check:bundle` and `npm run map:check` enforce the last two.
 - **Reduced motion** (the device preference, or the setting): the title backdrop and the briefing camera hold still, the view does not roll with the bank, and "Fly me there" cuts to the stop instead of time-warping across the city.
 - **Idle.** Under the pause menu the scene is drawn twice and then left alone until something changes.
-- **Touch.** The stick and buttons show only while flying or walking, and each action in the approach prompt is its own button.
+- **Touch.** The stick and buttons show only while flying or walking, each action in the approach prompt is its own button, and MENU (top left) opens the pause menu and settings, which have no other way in without a keyboard. The touch layout is driven by `(pointer: coarse)` media queries, so a narrow desktop window does not show it.
+
+### Search and sharing
+
+The flight is a canvas, so what a crawler or a script-less browser needs is put there at build time by `scripts/vite/pagePrerender.ts`, from the same content as everything else:
+
+- `index.html` gets a summary inside `<noscript>`: who this is, and a link to every stop on `/page/`.
+- Both pages get schema.org data (a `Person` and a `WebSite`) in the head. It carries only what the site already says, and no contact address.
+- `public/sitemap.xml` lists the two pages and `public/robots.txt` points at it and keeps crawlers off `/api/`.
+
+The site's address is `SITE_URL` in `src/content/links.ts`; a test checks that the canonical links, the sitemap and `robots.txt` all agree with it.
 
 ### Keyboard focus and recovery
 

@@ -1,0 +1,6 @@
+# Everything public may be crawled. The chat endpoint is an API, not a page.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://richmantan.vercel.app/sitemap.xml
