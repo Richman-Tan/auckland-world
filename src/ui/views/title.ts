@@ -102,5 +102,5 @@ export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) =>
     }
   }
 
-  return { el, focusTarget: fly, setProgress, setSeen };
+  return { el, card, focusTarget: fly, setProgress, setSeen };
 }

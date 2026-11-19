@@ -8,7 +8,7 @@
  *   X            land at a stop with a room
  *   B            back / close
  *   Y            destinations map
- *   Start        pause
+ *   Start        pause menu (and again to resume)
  *   Select       show the keys
  *   D-pad ← →    page through a briefing, move through the map list
  *   LB           next stop (in a briefing)
@@ -54,7 +54,7 @@ export function readPad(pad: PadSnapshot, prev: readonly boolean[], mode: 'fligh
   if (went(BUTTON.x)) actions.push('interact');
   if (went(BUTTON.b)) actions.push('back');
   if (went(BUTTON.y)) actions.push('nav');
-  if (went(BUTTON.start)) actions.push('back');
+  if (went(BUTTON.start)) actions.push('menu');
   if (went(BUTTON.select)) actions.push('help');
   if (went(BUTTON.left)) actions.push('prev');
   if (went(BUTTON.right)) actions.push('next');

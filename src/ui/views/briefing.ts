@@ -103,6 +103,8 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
       dots.hidden = n < 2;
       back.setAttribute('aria-disabled', String(idx <= 0));
       next.setAttribute('aria-disabled', String(idx >= n - 1));
+      // On a phone the sheet is short, so "next stop" waits until the last page (see ui.css).
+      el.dataset.last = String(idx >= n - 1);
       all.setAttribute('href', stopHash(stopId, idx > 0 ? page.id : undefined));
       setText(status, `Page ${idx + 1} of ${n}: ${page.title}`);
     },

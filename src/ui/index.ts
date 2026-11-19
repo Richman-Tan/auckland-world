@@ -219,6 +219,11 @@ export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi
     flash() {
       room.flash();
     },
+    titleRight() {
+      if (title.el.hidden) return null;
+      const r = title.card.getBoundingClientRect();
+      return r.width > 0 ? r.right : null;
+    },
     setPageHref(href: string) {
       error.setPageHref(href);
     },

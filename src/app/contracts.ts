@@ -167,6 +167,7 @@ export type InputAction =
   | 'prev' // ArrowLeft / A in dialogs
   | 'help' // H
   | 'nextStop' // N in a briefing: fly on to the next stop not yet seen
+  | 'menu' // the pause menu, from anywhere (touch MENU button, gamepad Start); Esc gets there by backing out
   | 'select1'
   | 'select2'
   | 'select3'
@@ -231,6 +232,11 @@ export interface WorldScene {
   render(camera: Camera): void;
   /** Call on window resize; returns the internal (low-res) size. */
   resize(cssWidth: number, cssHeight: number): { width: number; height: number };
+  /**
+   * Hide beacon icons left of this x (clip space, -1 = left edge of the view, 1 = right), or show
+   * them all with null. Used behind the title card, where an icon would sit on top of the text.
+   */
+  setIconClip(left: number | null): void;
   /** Sky, light, fog and water colours for the time of day (src/shared/timeOfDay.ts). */
   setLook(look: Look): void;
   /** Change draw distance and render resolution on the fly (the frame-rate governor, or a pinned setting). */
@@ -322,6 +328,8 @@ export interface UiApi {
   setProgress(p: ProgressView): void;
   /** Cut through black (a jump to another stop without flying there). */
   flash(): void;
+  /** Right edge (CSS px) of the title screen's text block while it is showing, else null. */
+  titleRight(): number | null;
   /** Where "Read it as a page" on the error screen leads, e.g. /page/#projects-wie-academy for a link to that page. */
   setPageHref(href: string): void;
 }

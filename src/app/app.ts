@@ -352,6 +352,20 @@ export function startApp(): void {
     // Walking again (just landed, or a screen's panel closed): keys go back to the scene.
     if (next.kind === 'room' && next.panel === null && !(prev.kind === 'room' && prev.panel === null)) ui.focusScene();
     updatePrompt();
+    // The title card comes and goes with the state; measure it once the UI has been synced.
+    queueMicrotask(applyIconClip);
+  }
+
+  /**
+   * Beacon icons are drawn over everything in the 3D view, so behind the title screen they would
+   * sit on top of its text. Hide the ones under the text block (all of them on a narrow screen,
+   * where the block spans the width); the ones beside it, around the Sky Tower, stay.
+   */
+  function applyIconClip() {
+    if (!loaded) return;
+    const right = ui.titleRight();
+    // A little past the block's edge, as a fraction of the view: -1 is its left edge, 1 its right.
+    loaded.world.setIconClip(right === null ? null : Math.min(1, ((right + 24) / innerWidth) * 2 - 1));
   }
 
   function setInputMode(s: AppState) {
@@ -402,6 +416,12 @@ export function startApp(): void {
   }
 
   function onAction(action: InputAction) {
+    // The pause menu (and with it the settings) from anywhere, not only by backing out of flight:
+    // a touch screen has no Esc key, and inside a room "back" means leave.
+    if (action === 'menu') {
+      dispatch(state.kind === 'paused' && state.reason === 'menu' ? { type: 'RESUME' } : { type: 'PAUSE', reason: 'menu' });
+      return;
+    }
     const hot = stopForHotkey(action);
     switch (state.kind) {
       case 'title':
@@ -498,6 +518,7 @@ export function startApp(): void {
     idleFrames = 0;
   };
   addEventListener('resize', redraw);
+  addEventListener('resize', () => applyIconClip());
 
   function setDetailLevel(level: number) {
     detailLevel = Math.min(Math.max(level, 0), ladder.length - 1);
@@ -626,6 +647,7 @@ export function startApp(): void {
       applyGraphics();
       applyMotion();
       applyLook();
+      applyIconClip();
       if (state.kind === 'loading') dispatch({ type: 'LOADED' });
       requestAnimationFrame(frame);
     },

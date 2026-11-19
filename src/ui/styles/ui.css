@@ -219,7 +219,8 @@
 
 .aw-prompt {
   position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%);
-  max-width: calc(100vw - 24px); text-align: center; text-transform: uppercase; letter-spacing: 0.06em;
+  /* max-content: without it a centred box is squeezed to half the screen and wraps early */
+  width: max-content; max-width: calc(100vw - 24px); text-align: center; text-transform: uppercase; letter-spacing: 0.06em;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 calc(var(--u) * 3);
   padding: 0 calc(var(--u) * 4); border: var(--u) solid var(--kowhai); background: var(--panel); color: var(--cream);
   pointer-events: auto; min-height: 44px; animation: aw-pulse 1.4s steps(2) infinite;
@@ -495,6 +496,10 @@
 @media (pointer: coarse) {
   .aw-hud__deck { bottom: calc(var(--safe-b) + 6px); }
   .aw-attrib { bottom: auto; top: calc(var(--safe-t) + 2px); right: calc(var(--safe-r) + 6px); }
+  /* The attribution takes the top edge, so the compass drops below it, and the autopilot chip and
+     toasts drop below the MENU button (input/touch.css) that sits under the compass. */
+  .aw-hud__compass { top: calc(var(--safe-t) + 22px); }
+  .aw-hud__ap, .aw-toasts { top: calc(var(--safe-t) + 112px); }
 }
 @media (pointer: coarse) and (orientation: landscape) {
   .aw-hud__deck { left: calc(var(--safe-l) + 190px); right: calc(var(--safe-r) + 120px); transform: none; width: auto; }
@@ -505,6 +510,8 @@
 }
 @media (pointer: coarse) and (orientation: portrait) {
   .aw-hud__deck { bottom: calc(var(--safe-b) + 190px); }
+  /* above the HUD panel, which itself sits above the stick and buttons */
+  .aw-prompt { bottom: calc(var(--safe-b) + 310px); }
   .aw-hud__alt, .aw-hud__alttape { display: none; }
   .aw-hud__deck { grid-template-columns: auto minmax(0, 1fr) auto; }
 }
@@ -608,3 +615,15 @@ html[data-motion='reduced'] .aw-ui *, html[data-motion='reduced'] .aw-ui *::befo
 .aw-ui .aw-hud__sound[aria-pressed='true'] { color: var(--kowhai); border-color: var(--kowhai); }
 .aw-ui[data-state='briefing'] .aw-hud__sound, .aw-ui[data-state='chat'] .aw-hud__sound { display: none; }
 @media (max-width: 760px) { .aw-ui .aw-hud__sound { top: calc(var(--safe-t) + 44px); } }
+/* On a touch screen that corner is the MENU button; sound is one tap further, in its settings. */
+@media (pointer: coarse) { .aw-ui .aw-hud__sound { display: none; } }
+
+/* ------------------------------------------------------ phones: room to read */
+/* The bottom sheet is short. Keep its footer to the paging row until the last page, where "next
+   stop" belongs anyway, and drop key hints nobody can press. */
+@media (max-width: 760px) {
+  .aw-briefing:not([data-last='true']) .aw-briefing__onward { display: none; }
+}
+@media (pointer: coarse) {
+  .aw-briefing__action .aw-kbd, .aw-briefing__onward .aw-kbd { display: none; }
+}

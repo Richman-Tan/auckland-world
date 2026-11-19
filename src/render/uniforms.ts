@@ -19,6 +19,12 @@ export interface SharedUniforms {
   uAmbient: Uniform<Vector3>;
   /** 0 by day to 1 at night: windows, floodlights, headlights and stars come up with it. */
   uNight: Uniform<number>;
+  /**
+   * Beacon icons whose centre is left of this x (clip space, -1 = left edge, 1 = right) are not
+   * drawn. Icons ignore depth so they can be seen through buildings; that also lets them show
+   * through the title card, on top of its text. -2 draws them all.
+   */
+  uIconClipLeft: Uniform<number>;
   uWall: Uniform<Vector3[]>;
   uRoof: Uniform<Vector3[]>;
 }
@@ -52,6 +58,7 @@ export function createSharedUniforms(fogFar: number): SharedUniforms {
     uLightLo: { value: new Vector3() },
     uAmbient: { value: new Vector3(1, 1, 1) },
     uNight: { value: 0 },
+    uIconClipLeft: { value: -2 },
     uWall: { value: palette(WALL_PALETTE) },
     uRoof: { value: palette(ROOF_PALETTE) },
   };

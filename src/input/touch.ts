@@ -3,7 +3,7 @@ import './touch.css';
 
 const STICK_R = 54;
 
-/** Virtual stick (bottom left) and BOOST / MAP / READ buttons (bottom right). */
+/** Virtual stick (bottom left), BOOST / MAP / READ buttons (bottom right) and MENU (top left). */
 export function createTouchControls(root: HTMLElement, core: InputCore): { dispose(): void } {
   const wrap = document.createElement('div');
   wrap.className = 'aw-touch';
@@ -29,7 +29,9 @@ export function createTouchControls(root: HTMLElement, core: InputCore): { dispo
   const map = mk('MAP', '');
   const read = mk('READ', '');
   btns.append(boost, map, read);
-  wrap.append(stick, btns);
+  // The only way to the pause menu, and so to the settings, without a keyboard.
+  const menu = mk('MENU', 'aw-btn-menu');
+  wrap.append(stick, btns, menu);
   root.append(wrap);
   // The stick and buttons only mean something while flying or walking; over the title screen, a
   // briefing sheet or the chat they just cover the page (each of those has its own buttons).
@@ -92,6 +94,7 @@ export function createTouchControls(root: HTMLElement, core: InputCore): { dispo
   const onRead = () => core.trigger('briefing');
   map.addEventListener('click', onMap);
   read.addEventListener('click', onRead);
+  menu.addEventListener('click', () => core.trigger('menu'));
 
   return {
     dispose() {

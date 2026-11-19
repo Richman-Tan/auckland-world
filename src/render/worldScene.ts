@@ -242,6 +242,10 @@ export class WorldSceneImpl implements WorldScene {
     this.lastRender = t1;
   }
 
+  setIconClip(left: number | null): void {
+    this.shared.uIconClipLeft.value = left ?? -2;
+  }
+
   setLook(look: Look): void {
     applyLook(this.shared, look);
     const sky = (this.sky.material as ShaderMaterial).uniforms;

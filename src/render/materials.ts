@@ -510,10 +510,14 @@ void main() {
   vec4 cv = viewMatrix * vec4(uCenter, 1.0);
   float dist = max(-cv.z, 0.5);
   float worldPerPx = 2.0 * dist / (projectionMatrix[1][1] * uResY);
+  // Where the icon's centre lands on screen, before the quad is spread around it.
+  vec4 centre = projectionMatrix * cv;
   cv.xy += position.xy * uPxSize * worldPerPx;
   gl_Position = projectionMatrix * cv;
   ${FAR_CLAMP}
-}`.replace('void main', 'uniform float uResY;\nvoid main'),
+  // Under the title card: drop the whole icon (all four corners agree, so it never half-shows).
+  if (centre.w > 0.0 && centre.x / centre.w < uIconClipLeft) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}`.replace('void main', 'uniform float uResY;\nuniform float uIconClipLeft;\nvoid main'),
     /* glsl */ `
 in vec2 vUv;
 uniform sampler2D uTex;

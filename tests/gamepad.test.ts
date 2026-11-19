@@ -50,7 +50,7 @@ describe('gamepad', () => {
 
   it('covers every action the keyboard has', () => {
     const all = readPad(pad({ down: [0, 1, 2, 3, 4, 8, 9, 14, 15] }), [], 'flight').actions;
-    expect(all).toEqual(['briefing', 'interact', 'back', 'nav', 'back', 'help', 'prev', 'next', 'nextStop']);
+    expect(all).toEqual(['briefing', 'interact', 'back', 'nav', 'menu', 'help', 'prev', 'next', 'nextStop']);
   });
 
   it('A confirms in a dialog (Enter) and reads or uses while flying (Space)', () => {

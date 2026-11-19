@@ -44,7 +44,8 @@
   justify-items: end;
   pointer-events: none;
 }
-.aw-btn {
+/* Scoped to the overlay: the UI has its own .aw-btn (src/ui/styles/ui.css), and this sheet loads later. */
+.aw-touch .aw-btn {
   pointer-events: auto;
   touch-action: none;
   min-width: 72px;
@@ -57,12 +58,29 @@
   font: 700 14px/1 ui-monospace, 'Departure Mono', monospace;
   letter-spacing: 0.08em;
 }
-.aw-btn:active,
-.aw-btn[data-on='true'] {
+.aw-touch .aw-btn:active,
+.aw-touch .aw-btn[data-on='true'] {
   background: rgb(215 38 61 / 0.85);
 }
-.aw-btn-boost {
+.aw-touch .aw-btn-boost {
   grid-column: 1 / span 2;
   min-height: 72px;
   width: 100%;
+}
+.aw-touch .aw-btn-menu {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  /* under the compass tape, which spans the top of a portrait screen */
+  top: calc(env(safe-area-inset-top, 0px) + 64px);
+  min-width: 64px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+@media (orientation: landscape) {
+  /* the compass is in the middle there, so the corner is free */
+  .aw-touch .aw-btn-menu {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+  }
 }
