@@ -57,6 +57,10 @@ export function createErrorView() {
   return {
     el,
     focusTarget: page,
+    /** Point "Read it as a page" at the stop or page the visitor's link was for. */
+    setPageHref(href: string) {
+      page.setAttribute('href', href);
+    },
     set(reason: 'webgl' | 'load' | 'context', message?: string) {
       if (reason === 'webgl') {
         setText(heading, "Your browser can't show the 3D view");

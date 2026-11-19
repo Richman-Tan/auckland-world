@@ -1,5 +1,6 @@
-import type { AppEvent, LoadProgress } from '../../app/contracts';
-import type { SiteContent } from '../../content/types';
+import type { AppEvent, LoadProgress, ProgressView } from '../../app/contracts';
+import { TOUR_ORDER } from '../../app/progress';
+import type { SiteContent, StopId } from '../../content/types';
 import { ACCENTS } from '../../shared/palette';
 import { CONTROLS_HINT } from '../controls';
 import { h } from '../dom';
@@ -21,8 +22,16 @@ export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) =>
   fly.innerHTML = `${PLANE_SVG}<span>Fly over Auckland</span><span class="aw-title__cap" aria-hidden="true">Enter</span>`;
   fly.addEventListener('click', () => dispatch({ type: 'FLY' }));
 
+  // The tour: autopilot to each stop in turn, picking up at the first one not yet seen.
+  let tourStart: StopId = TOUR_ORDER[0];
+  const tourLabel = h('span', { text: 'Take the tour' });
+  const tourNote = h('span', { class: 'aw-title__tournote', hidden: true });
+  const tour = h('button', { class: 'aw-btn aw-title__tour', type: 'button' }, tourLabel, tourNote);
+  tour.addEventListener('click', () => dispatch({ type: 'TOUR', stop: tourStart }));
+
   const read = h('a', { class: 'aw-btn aw-btn--ghost aw-title__read', href: '/page/', text: 'Read it as a page' });
 
+  const stopButtons = new Map<StopId, HTMLButtonElement>();
   const stopsList = h('ul', { class: 'aw-title__stops', 'aria-label': 'Go straight to a stop' });
   for (const s of content.stops) {
     const b = h(
@@ -38,6 +47,7 @@ export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) =>
     );
     b.setAttribute('aria-label', `Go to ${s.label}, ${s.place}`);
     b.addEventListener('click', () => dispatch({ type: 'GO_TO_STOP', stop: s.id }));
+    stopButtons.set(s.id, b);
     stopsList.append(h('li', {}, b));
   }
 
@@ -55,7 +65,7 @@ export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) =>
     h('h1', { class: 'aw-title__name', id: 'aw-title-name', text: p.name }),
     h('p', { class: 'aw-title__role', text: p.title }),
     h('p', { class: 'aw-title__tag', text: p.tagline }),
-    h('div', { class: 'aw-title__cta' }, fly, read),
+    h('div', { class: 'aw-title__cta' }, fly, tour, read),
     h('p', { class: 'aw-title__or', text: 'Or jump straight to a stop' }),
     stopsList,
   );
@@ -75,5 +85,22 @@ export function createTitleView(content: SiteContent, dispatch: (e: AppEvent) =>
     progressText.textContent = `Loading Auckland · ${(lp.loadedBytes / 1e6).toFixed(1)} of ${(lp.totalBytes / 1e6).toFixed(1)} MB`;
   }
 
-  return { el, focusTarget: fly, setProgress };
+  /** Tick the stops already seen and let the tour pick up where the visitor left off. */
+  function setSeen(p: ProgressView): void {
+    const seen = p.visited.size;
+    tourStart = p.next(null) ?? TOUR_ORDER[0];
+    const partway = seen > 0 && seen < p.total;
+    tourLabel.textContent = partway ? 'Continue the tour' : 'Take the tour';
+    tourNote.textContent = seen > 0 ? `${seen} of ${p.total} seen` : '';
+    tourNote.hidden = seen === 0;
+    for (const s of content.stops) {
+      const b = stopButtons.get(s.id);
+      if (!b) continue;
+      const done = p.visited.has(s.id);
+      b.classList.toggle('is-seen', done);
+      b.setAttribute('aria-label', `Go to ${s.label}, ${s.place}${done ? ' (seen)' : ''}`);
+    }
+  }
+
+  return { el, focusTarget: fly, setProgress, setSeen };
 }

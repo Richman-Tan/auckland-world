@@ -63,6 +63,7 @@ export function edgeArrow(relativeDeg: number, w: number, h: number): { x: numbe
   return { x: w / 2 + Math.sin(a) * rx, y: h * 0.46 - Math.cos(a) * ry, rotDeg: relativeDeg };
 }
 
-export function stopHash(stop: string): string {
-  return `/page/#${stop}`;
+/** The plain page's anchor for a stop, or for one of its pages. */
+export function stopHash(stop: string, pageId?: string): string {
+  return `/page/#${stop}${pageId ? `-${pageId}` : ''}`;
 }

@@ -10,6 +10,23 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
   const kicker = h('p', { class: 'aw-briefing__kicker' });
   const x = h('button', { class: 'aw-btn aw-briefing__x', type: 'button', 'aria-label': 'Close briefing', text: '×' });
   x.addEventListener('click', () => dispatch({ type: 'CLOSE_BRIEFING' }));
+  // The address bar already points at this page (app.ts keeps it in step), so sharing is one copy away.
+  const copy = h('button', { class: 'aw-btn aw-briefing__copy', type: 'button', text: 'Copy link' });
+  let copyTimer = 0;
+  const copied = (text: string) => {
+    copy.textContent = text;
+    setText(status, text);
+    clearTimeout(copyTimer);
+    copyTimer = window.setTimeout(() => (copy.textContent = 'Copy link'), 2200);
+  };
+  copy.addEventListener('click', () => {
+    const done = navigator.clipboard?.writeText(location.href);
+    if (!done) return copied('Copy it from the address bar');
+    done.then(
+      () => copied('Link copied'),
+      () => copied('Copy it from the address bar'),
+    );
+  });
   const title = h('h2', { class: 'aw-briefing__title', id: 'aw-briefing-h', tabindex: -1 });
   const sub = h('p', { class: 'aw-briefing__sub' });
   const period = h('p', { class: 'aw-briefing__period' });
@@ -28,19 +45,24 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
   const action = h('button', { class: 'aw-btn aw-btn--primary aw-briefing__action', type: 'button', hidden: true });
   let onAction: (() => void) | null = null;
   action.addEventListener('click', () => onAction?.());
+  // Where to go after this stop: the next one not yet seen (the tour), or the chat once all are.
+  const onward = h('button', { class: 'aw-btn aw-briefing__onward', type: 'button', hidden: true });
+  let onOnward: (() => void) | null = null;
+  onward.addEventListener('click', () => onOnward?.());
 
   const foot = h(
     'div',
     { class: 'aw-briefing__foot' },
     action,
     h('div', { class: 'aw-briefing__nav' }, back, dots, next),
+    onward,
     h('div', { class: 'aw-briefing__meta' }, all, hintEl),
     status,
   );
   const el = h(
     'section',
     { class: 'aw-briefing aw-panel', hidden: true, role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'aw-briefing-h', tabindex: -1 },
-    h('div', { class: 'aw-briefing__top' }, kicker, x),
+    h('div', { class: 'aw-briefing__top' }, kicker, h('div', { class: 'aw-briefing__tools' }, copy, x)),
     h('div', { class: 'aw-briefing__head' }, title, sub, period),
     body,
     foot,
@@ -81,7 +103,7 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
       dots.hidden = n < 2;
       back.setAttribute('aria-disabled', String(idx <= 0));
       next.setAttribute('aria-disabled', String(idx >= n - 1));
-      all.setAttribute('href', stopHash(stopId));
+      all.setAttribute('href', stopHash(stopId, idx > 0 ? page.id : undefined));
       setText(status, `Page ${idx + 1} of ${n}: ${page.title}`);
     },
     reset(): void {
@@ -92,6 +114,12 @@ export function createBriefingView(content: SiteContent, dispatch: (e: AppEvent)
       onAction = a?.run ?? null;
       action.hidden = !a;
       if (a) action.replaceChildren(document.createTextNode(a.label), ...(a.key ? [h('span', { class: 'aw-kbd', text: a.key })] : []));
+    },
+    /** Show the "next stop" button (label and handler), or hide it with null. */
+    setNext(a: { label: string; key?: string; run: () => void } | null): void {
+      onOnward = a?.run ?? null;
+      onward.hidden = !a;
+      if (a) onward.replaceChildren(document.createTextNode(a.label), ...(a.key ? [h('span', { class: 'aw-kbd', text: a.key })] : []));
     },
     setCloseLabel(text: string): void {
       x.setAttribute('aria-label', text);

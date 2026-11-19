@@ -3,7 +3,8 @@
  * opts.root over the canvas. It renders from AppState and dispatches AppEvents on pointer clicks;
  * it never listens to keys and never mutates app state.
  */
-import type { AppState, CreateUi, LoadProgress, PromptInfo, Telemetry, UiApi, UiWorld } from '../app/contracts';
+import type { AppState, CreateUi, LoadProgress, ProgressView, PromptInfo, Telemetry, UiApi, UiWorld } from '../app/contracts';
+import { onward } from '../app/progress';
 import { createScriptedBackend } from '../chat';
 import { createRemoteBackend } from '../chat/remote';
 import type { StopId } from '../content/types';
@@ -49,6 +50,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const stopLabel = (id: StopId | null): string | null => content.stops.find((s) => s.id === id)?.label ?? null;
 
   let state: AppState = { kind: 'title' };
+  let progress: ProgressView | null = null;
   let autopilotTarget: StopId | null = null;
   let focusKey = '';
   let lastPlaneKey = '';
@@ -67,6 +69,23 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     // Wait a frame so the element is laid out after being unhidden. A getter is resolved then too:
     // a digit key opens the map and picks a stop in the same tick, and focus should land on that stop.
     requestAnimationFrame(() => (typeof el === 'function' ? el() : el).focus({ preventScroll: true }));
+  }
+
+  /**
+   * The "next stop" button under a briefing, a room's page or the chat: the next stop not yet seen,
+   * or the chat once everything has been. GO_TO_STOP from there flies it on autopilot.
+   */
+  function syncOnward(view: AppState): void {
+    const here = view.kind === 'briefing' || view.kind === 'chat' || (view.kind === 'room' && view.panel !== null) ? view.stop : null;
+    const to = here && progress ? onward(progress, here) : null;
+    const next = to
+      ? {
+          label: to.finale ? "That's everything. Say hello" : `Next stop: ${stopLabel(to.stop) ?? ''}`,
+          run: () => dispatch({ type: 'GO_TO_STOP', stop: to.stop }),
+        }
+      : null;
+    briefing.setNext(next && view.kind !== 'chat' ? { ...next, key: 'N' } : null);
+    chat.setNext(view.kind === 'chat' ? next : null);
   }
 
   function sync(next: AppState): void {
@@ -118,6 +137,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
       roomHere ? { label: `Visit the ${roomHere.label ?? 'room'}`, key: 'E', run: () => dispatch({ type: 'ENTER_ROOM', stop: (view as { stop: StopId }).stop }) } : null,
     );
     briefing.setCloseLabel(view.kind === 'room' ? 'Close and keep walking' : 'Close briefing');
+    syncOnward(view);
     if (view.kind === 'room') {
       const stop = content.stops.find((s) => s.id === view.stop);
       room.setPlace(`${roomOf(view.stop)?.label ?? 'Room'} · ${stop?.place ?? ''}`);
@@ -189,6 +209,18 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     focusScene() {
       focusKey = 'scene';
       document.getElementById('scene')?.focus({ preventScroll: true });
+    },
+    setProgress(p: ProgressView) {
+      progress = p;
+      title.setSeen(p);
+      nav.setSeen(p);
+      syncOnward(state.kind === 'paused' ? state.resumeTo : state);
+    },
+    flash() {
+      room.flash();
+    },
+    setPageHref(href: string) {
+      error.setPageHref(href);
     },
     setWorld(world: UiWorld) {
       // The live city now renders behind the title screen: fade the placeholder backdrop.

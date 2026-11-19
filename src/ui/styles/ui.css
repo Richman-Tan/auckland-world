@@ -557,3 +557,15 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-fade.is-on { animation-duration: 0.2s; }
 }
+
+/* ------------------------------------------------- tour, progress and links */
+.aw-ui .aw-title__tour { display: inline-flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-size: 12px; }
+.aw-title__tournote { font-size: 10px; letter-spacing: 0.08em; color: var(--kowhai); }
+/* A seen stop keeps its colour and gets a tick, so the unseen ones stand out without anything looking disabled. */
+.aw-title__stop.is-seen .aw-title__stoplabel::after,
+.aw-stopbtn.is-seen .aw-stopbtn__label::after { content: ' ✓'; color: var(--accent, var(--kowhai)); font-family: var(--mono); font-size: 0.6em; vertical-align: 0.2em; }
+.aw-nav__seen { color: var(--kowhai); text-transform: uppercase; font-size: 11px; }
+.aw-briefing__tools { display: flex; align-items: flex-start; gap: calc(var(--u) * 2); flex: none; }
+.aw-ui .aw-briefing__copy { min-height: 44px; padding: 0 calc(var(--u) * 3); font-size: 11px; }
+.aw-ui .aw-briefing__onward, .aw-ui .aw-chat__onward { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left; border-color: var(--accent, var(--cream)); }
+.aw-ui .aw-chat__onward { width: auto; margin: 0 calc(var(--u) * 4) calc(var(--u) * 2); }

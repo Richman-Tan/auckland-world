@@ -8,7 +8,14 @@ import type { StopId } from '../content/types';
 
 export type AutopilotPhase = 'climb' | 'cruise' | 'descend' | 'arrive';
 
-export type LoadIntent = { mode: 'fly' } | { mode: 'stop'; stop: StopId };
+/**
+ * What to do once the world has loaded: fly free, open a stop (optionally at a page, or inside its
+ * room, for links), or start the tour by flying to its first stop.
+ */
+export type LoadIntent =
+  | { mode: 'fly' }
+  | { mode: 'stop'; stop: StopId; page?: number; room?: boolean }
+  | { mode: 'tour'; stop: StopId };
 
 export type AppState =
   | { kind: 'title' }
@@ -31,7 +38,15 @@ export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilo
 
 export type AppEvent =
   | { type: 'FLY' }
-  | { type: 'GO_TO_STOP'; stop: StopId }
+  /** From the title, page and room say where in the stop to open (a link to one project, or the Sky Deck). */
+  | { type: 'GO_TO_STOP'; stop: StopId; page?: number; room?: boolean }
+  /** Title screen: load, then fly to this stop on autopilot. */
+  | { type: 'TOUR'; stop: StopId }
+  /**
+   * Cut straight to a stop's briefing page, chat or room from wherever the visitor is (browser
+   * Back and Forward, and reduced motion). The app moves the plane; nothing is flown.
+   */
+  | { type: 'JUMP'; stop: StopId; page?: number; room?: boolean }
   | { type: 'LOADED' }
   | { type: 'LOAD_FAILED'; message?: string }
   | { type: 'NO_WEBGL' }
@@ -83,6 +98,18 @@ function arrive(stop: StopId, ctx: FsmContext): AppState {
   return { kind: 'briefing', stop, page: 0, pageCount };
 }
 
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
+/** A stop opened at a given page, or inside its room (with that page's screen open, if any). */
+function openAt(stop: StopId, page: number | undefined, wantRoom: boolean | undefined, ctx: FsmContext): AppState {
+  if (wantRoom && ctx.hasRoom(stop)) {
+    const pageCount = Math.max(1, ctx.pageCount(stop));
+    return { kind: 'room', stop, panel: page === undefined ? null : clamp(page, 0, pageCount - 1), pageCount };
+  }
+  const s = arrive(stop, ctx);
+  return s.kind === 'briefing' && page !== undefined ? { ...s, page: clamp(page, 0, s.pageCount - 1) } : s;
+}
+
 function isActive(s: AppState): s is ActiveState {
   return s.kind === 'flying' || s.kind === 'nav' || s.kind === 'autopilot' || s.kind === 'briefing' || s.kind === 'chat' || s.kind === 'room';
 }
@@ -98,15 +125,31 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
     return { kind: 'paused', reason: event.reason, resumeTo: state };
   }
 
+  if (event.type === 'JUMP') {
+    if (!isActive(state)) return state;
+    const next = openAt(event.stop, event.page, event.room, ctx);
+    // Already exactly there: keep the same object so nothing re-renders or refocuses.
+    return JSON.stringify(next) === JSON.stringify(state) ? state : next;
+  }
+
   switch (state.kind) {
     case 'title':
       if (event.type === 'FLY') return { kind: 'loading', intent: { mode: 'fly' } };
-      if (event.type === 'GO_TO_STOP') return { kind: 'loading', intent: { mode: 'stop', stop: event.stop } };
+      if (event.type === 'GO_TO_STOP') {
+        const intent: LoadIntent = { mode: 'stop', stop: event.stop };
+        if (event.page !== undefined) intent.page = event.page;
+        if (event.room) intent.room = true;
+        return { kind: 'loading', intent };
+      }
+      if (event.type === 'TOUR') return { kind: 'loading', intent: { mode: 'tour', stop: event.stop } };
       return state;
 
     case 'loading':
       if (event.type === 'LOADED') {
-        return state.intent.mode === 'stop' ? arrive(state.intent.stop, ctx) : { kind: 'flying' };
+        const intent = state.intent;
+        if (intent.mode === 'stop') return openAt(intent.stop, intent.page, intent.room, ctx);
+        if (intent.mode === 'tour') return { kind: 'autopilot', target: intent.stop, phase: 'climb' };
+        return { kind: 'flying' };
       }
       if (event.type === 'LOAD_FAILED') return { kind: 'error', reason: 'load', message: event.message };
       return state;

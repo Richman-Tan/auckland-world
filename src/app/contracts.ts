@@ -18,7 +18,9 @@ import type { MapMeta } from '../shared/mapFormat';
 import type { WorldQuery } from '../shared/collision';
 import type { PaletteKey } from '../shared/palette';
 import type { AppEvent, AppState, AutopilotPhase } from './fsm';
+import type { ProgressView } from './progress';
 
+export type { ProgressView } from './progress';
 export type { WorldQuery, Collider, CollisionGrid } from '../shared/collision';
 export type { AppEvent, AppState, AutopilotPhase } from './fsm';
 
@@ -158,6 +160,7 @@ export type InputAction =
   | 'next' // ArrowRight / D in dialogs
   | 'prev' // ArrowLeft / A in dialogs
   | 'help' // H
+  | 'nextStop' // N in a briefing: fly on to the next stop not yet seen
   | 'select1'
   | 'select2'
   | 'select3'
@@ -300,6 +303,12 @@ export interface UiApi {
   focusScene(): void;
   /** Called once the map has loaded: enables the minimap, radar and nav overlay. */
   setWorld(world: UiWorld): void;
+  /** Which stops have been seen: ticks on the title and map, and the "next stop" button. */
+  setProgress(p: ProgressView): void;
+  /** Cut through black (a jump to another stop without flying there). */
+  flash(): void;
+  /** Where "Read it as a page" on the error screen leads, e.g. /page/#projects-wie-academy for a link to that page. */
+  setPageHref(href: string): void;
 }
 
 export interface UiWorld {

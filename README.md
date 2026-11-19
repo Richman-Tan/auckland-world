@@ -9,7 +9,7 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 ```sh
 nvm use            # Node 22
 npm install
-npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to start at a stop, ?quality=low|high, ?debug for window.__aw)
+npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to open a stop, ?quality=low|high, ?debug for window.__aw)
 npm run typecheck  # src, scripts, api and the dev harnesses
 npm test
 npm run build      # typecheck, then vite build (this is what Vercel runs)
@@ -40,6 +40,12 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a bui
 - `src/shared/` binary map formats, collision, palette (shared by the pipeline and the runtime)
 - `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
 - `dev/*.html` dev-only harnesses for the world, flight, UI and the social card (`dev/og.html`)
+
+## Tour, progress and links
+
+- **Tour.** "Take the tour" on the title screen loads the world and flies to the first stop on autopilot. Every briefing and the chat then offer "Next stop" (N in a briefing), which flies to the next stop not yet seen, in `TOUR_ORDER` (`src/app/progress.ts`), ending at the chat.
+- **Progress.** Opening a stop's briefing, chat or room marks it seen. The set is kept in `localStorage` (`aw:progress:v1`) and shown as ticks on the title and the destinations map; the site works the same with storage blocked.
+- **Links.** The address follows what is open (`src/app/route.ts`): `/?stop=projects`, `/?stop=projects&page=wie-academy`, `/?stop=projects&room=skydeck`, `/?stop=talk`. Moving to another stop adds a history entry and a page turn rewrites the current one, so the browser's Back and Forward walk the visit a stop at a time (cutting to the stop rather than flying). "Copy link" in a briefing copies the address, and without WebGL the same link leads to that spot on `/page/`.
 
 ## Keyboard
 

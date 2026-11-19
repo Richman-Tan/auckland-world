@@ -1,5 +1,5 @@
 /** Destinations overlay: stop list on the left, minimap with beacons and the plane on the right. */
-import type { AppEvent, StopPlacement, Telemetry, UiWorld } from '../../app/contracts';
+import type { AppEvent, ProgressView, StopPlacement, Telemetry, UiWorld } from '../../app/contracts';
 import type { SiteContent, StopId } from '../../content/types';
 import { ACCENTS } from '../../shared/palette';
 import { h } from '../dom';
@@ -40,12 +40,14 @@ export function createNavView(content: SiteContent, dispatch: (e: AppEvent) => v
   const close = h('button', { class: 'aw-btn', type: 'button', text: 'Close', 'aria-label': 'Close destinations' });
   close.addEventListener('click', () => dispatch({ type: 'CLOSE_NAV' }));
   const hint = h('p', { class: 'aw-stopbtn__place', text: 'Pick a destination, then pick it again or press Fly me there.' });
+  const seenNote = h('p', { class: 'aw-nav__seen', hidden: true });
 
   const side = h(
     'div',
     { class: 'aw-nav__side' },
     h('div', { class: 'aw-nav__head' }, h('h2', { class: 'aw-h', id: 'aw-nav-h', text: 'Destinations' }), close),
     hint,
+    seenNote,
     list,
     h('div', { class: 'aw-nav__actions' }, fly, h('a', { class: 'aw-link', href: '/page/', text: 'Read everything as a page' })),
   );
@@ -117,6 +119,18 @@ export function createNavView(content: SiteContent, dispatch: (e: AppEvent) => v
     setPlane(p: Telemetry['plane']) {
       plane = p;
       redraw();
+    },
+    /** Tick the stops already seen. */
+    setSeen(p: ProgressView) {
+      for (const s of content.stops) {
+        const b = buttons.get(s.id);
+        if (!b) continue;
+        const done = p.visited.has(s.id);
+        b.classList.toggle('is-seen', done);
+        b.setAttribute('aria-label', `${s.label}, ${s.place}. ${s.pitch}${done ? ' (seen)' : ''}`);
+      }
+      seenNote.textContent = p.visited.size >= p.total ? `All ${p.total} stops seen` : `${p.visited.size} of ${p.total} stops seen`;
+      seenNote.hidden = p.visited.size === 0;
     },
   };
 }

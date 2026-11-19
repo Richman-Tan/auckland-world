@@ -129,6 +129,11 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
     enqueue({ text }, text);
   });
 
+  // After the chat: the next stop not yet seen. Hidden once everything has been.
+  const onward = h('button', { class: 'aw-btn aw-chat__onward', type: 'button', hidden: true });
+  let onOnward: (() => void) | null = null;
+  onward.addEventListener('click', () => onOnward?.());
+
   const all = h('a', { class: 'aw-link aw-briefing__all', text: 'Read everything as a page' });
   const disclosure = h('span', { class: 'aw-chat__disclosure', text: 'Pre-written answers for now' });
   const meta = h(
@@ -148,6 +153,7 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
     log,
     suggest,
     form,
+    onward,
     meta,
     status,
   );
@@ -280,6 +286,12 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
         void backend.mode?.().then((m) => setText(disclosure, m === 'ai' ? 'Typed replies may be AI-written' : 'Pre-written answers for now'));
         chain(() => say(() => backend.greet(), 450));
       }
+    },
+    /** Show the "next stop" button (label and handler), or hide it with null. */
+    setNext(a: { label: string; run: () => void } | null): void {
+      onOnward = a?.run ?? null;
+      onward.hidden = !a;
+      if (a) setText(onward, a.label);
     },
     /** Called on every UI sync while the chat is not showing: settle any reply in progress. */
     hide(): void {

@@ -64,6 +64,52 @@ describe('fsm', () => {
     expect(run(s, { type: 'BACK' })).toEqual({ kind: 'flying' });
   });
 
+  it('a link from the title opens the stop at that page, or inside its room', () => {
+    let s = run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'projects', page: 2 });
+    expect(s).toEqual({ kind: 'loading', intent: { mode: 'stop', stop: 'projects', page: 2 } });
+    expect(run(s, { type: 'LOADED' })).toEqual({ kind: 'briefing', stop: 'projects', page: 2, pageCount: 4 });
+    // A page past the end is clamped rather than trusted.
+    expect(run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'projects', page: 99 }, { type: 'LOADED' })).toMatchObject({ kind: 'briefing', page: 3 });
+    s = run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'projects', room: true }, { type: 'LOADED' });
+    expect(s).toEqual({ kind: 'room', stop: 'projects', panel: null, pageCount: 4 });
+    s = run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'projects', room: true, page: 1 }, { type: 'LOADED' });
+    expect(s).toEqual({ kind: 'room', stop: 'projects', panel: 1, pageCount: 4 });
+    // No room at this stop: the link falls back to its briefing. A chat stop ignores the page.
+    expect(run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'study', room: true }, { type: 'LOADED' })).toEqual({ kind: 'briefing', stop: 'study', page: 0, pageCount: 2 });
+    expect(run({ kind: 'title' }, { type: 'GO_TO_STOP', stop: 'talk', page: 1 }, { type: 'LOADED' })).toEqual({ kind: 'chat', stop: 'talk' });
+  });
+
+  it('the tour loads, then flies to its first stop on autopilot', () => {
+    const s = run({ kind: 'title' }, { type: 'TOUR', stop: 'projects' });
+    expect(s).toEqual({ kind: 'loading', intent: { mode: 'tour', stop: 'projects' } });
+    expect(run(s, { type: 'LOADED' })).toEqual({ kind: 'autopilot', target: 'projects', phase: 'climb' });
+    expect(run({ kind: 'flying' }, { type: 'TOUR', stop: 'projects' })).toEqual({ kind: 'flying' });
+  });
+
+  it('JUMP cuts to a stop, page or room from any active state, and nowhere else', () => {
+    const active: AppState[] = [
+      { kind: 'flying' },
+      { kind: 'nav', selected: 'work' },
+      { kind: 'autopilot', target: 'work', phase: 'cruise' },
+      { kind: 'briefing', stop: 'study', page: 1, pageCount: 2 },
+      { kind: 'chat', stop: 'talk' },
+      { kind: 'room', stop: 'projects', panel: 2, pageCount: 4 },
+    ];
+    for (const s of active) {
+      expect(run(s, { type: 'JUMP', stop: 'projects', page: 1 })).toEqual({ kind: 'briefing', stop: 'projects', page: 1, pageCount: 4 });
+      expect(run(s, { type: 'JUMP', stop: 'talk' })).toEqual({ kind: 'chat', stop: 'talk' });
+      expect(run(s, { type: 'JUMP', stop: 'projects', room: true })).toEqual({ kind: 'room', stop: 'projects', panel: null, pageCount: 4 });
+    }
+    const title: AppState = { kind: 'title' };
+    expect(run(title, { type: 'JUMP', stop: 'projects' })).toBe(title);
+    const paused: AppState = { kind: 'paused', reason: 'menu', resumeTo: { kind: 'flying' } };
+    expect(run(paused, { type: 'JUMP', stop: 'projects' })).toBe(paused);
+    // Jumping to where you already are changes nothing (same object, so no re-render).
+    const here: AppState = { kind: 'briefing', stop: 'projects', page: 0, pageCount: 4 };
+    expect(run(here, { type: 'JUMP', stop: 'projects' })).toBe(here);
+    expect(run(here, { type: 'JUMP', stop: 'projects', page: 0 })).toBe(here);
+  });
+
   it('a WebGL context that never comes back ends on the error screen from any state', () => {
     const from: AppState[] = [
       { kind: 'title' },

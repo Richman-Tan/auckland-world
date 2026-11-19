@@ -52,6 +52,8 @@ const DIALOG_KEYS: Record<string, InputAction> = {
   // E: land from a briefing at a stop with a room, or close a room's page and keep walking.
   KeyE: 'interact',
   KeyM: 'nav',
+  // N: on to the next stop from a briefing.
+  KeyN: 'nextStop',
   Escape: 'back',
   Enter: 'engage',
   NumpadEnter: 'engage',

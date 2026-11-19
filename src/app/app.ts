@@ -32,6 +32,9 @@ import type {
 import { NO_CONTROLS } from './contracts';
 import { type AppEvent, type AppState, simulationRunning, transition } from './fsm';
 import { placeStops, spawnPoint } from './placement';
+import { TOUR_ORDER, createProgress, onward } from './progress';
+import { type Route, pageHref, pageIndex, parseRoute, routeOf, routeTitle, samePlace, sameRoute, searchFor } from './route';
+import { browserStorage } from './storage';
 
 const STEP = 1 / 60;
 const MAX_STEPS_PER_FRAME = 60;
@@ -132,13 +135,68 @@ export function startApp(): void {
     const next = transition(prev, e, fsmCtx);
     if (next === prev) return;
     state = next;
-    onEnter(prev, next);
+    onEnter(prev, next, e);
     ui.sync(state);
+    syncUrl();
     if (failure && state.kind === 'loading') dispatch({ type: 'LOAD_FAILED', message: failure });
   }
 
   ui = createUi({ root, content, dispatch });
   ui.sync(state);
+
+  /** Stops seen so far, remembered between visits: ticks, and where "next stop" leads. */
+  const progress = createProgress(TOUR_ORDER, browserStorage());
+  ui.setProgress(progress);
+
+  /* ------------------------------------------------------- address and history */
+
+  const baseTitle = document.title;
+  /** What the address bar says right now. */
+  let urlRoute: Route = parseRoute(location.search, content);
+  /** True while following the browser's Back or Forward, so the app does not add entries of its own. */
+  let followingHistory = false;
+  // A link to a stop that cannot be shown in 3D still leads to the same spot on the plain page.
+  ui.setPageHref(pageHref(urlRoute));
+
+  /** Keep the address in step with the state, so any stop, page or room can be linked to. */
+  function syncUrl() {
+    const r = routeOf(state, content);
+    if (!r) return;
+    document.title = routeTitle(r, content, baseTitle);
+    if (sameRoute(r, urlRoute)) return;
+    const url = `${location.pathname}${searchFor(r, location.search)}${location.hash}`;
+    // A page turn rewrites the current entry; moving to another stop, or through the room's door,
+    // adds one, so Back retraces the visit a stop at a time.
+    if (followingHistory || samePlace(r, urlRoute)) history.replaceState(null, '', url);
+    else history.pushState(null, '', url);
+    urlRoute = r;
+    ui.setPageHref(pageHref(r));
+  }
+
+  function openRoute(r: Route, type: 'GO_TO_STOP' | 'JUMP') {
+    if (!r.stop) return;
+    const page = pageIndex(content, r.stop, r.page);
+    dispatch({ type, stop: r.stop, page: page >= 0 ? page : undefined, room: !!r.room });
+  }
+
+  addEventListener('popstate', () => {
+    const r = parseRoute(location.search, content);
+    urlRoute = r;
+    followingHistory = true;
+    try {
+      if (state.kind === 'paused' && state.reason === 'menu') dispatch({ type: 'RESUME' });
+      if (r.stop) openRoute(r, state.kind === 'title' ? 'GO_TO_STOP' : 'JUMP');
+      else {
+        // Back to the bare address: close whatever is open and carry on flying.
+        if (state.kind === 'room' && state.panel !== null) dispatch({ type: 'CLOSE_BRIEFING' });
+        if (state.kind === 'room') dispatch({ type: 'LEAVE_ROOM' });
+        else if (state.kind === 'briefing') dispatch({ type: 'CLOSE_BRIEFING' });
+        else if (state.kind === 'chat') dispatch({ type: 'CLOSE_CHAT' });
+      }
+    } finally {
+      followingHistory = false;
+    }
+  });
 
   /* ----------------------------------------------------------- state effects */
 
@@ -172,8 +230,11 @@ export function startApp(): void {
     if (page >= 0) dispatch({ type: 'ROOM_PANEL', page });
   }
 
-  function onEnter(prev: AppState, next: AppState) {
+  function onEnter(prev: AppState, next: AppState, event: AppEvent) {
     if (next.kind === 'loading' && loaded) queueMicrotask(() => dispatch({ type: 'LOADED' }));
+
+    // Opening a stop in any form (briefing, chat, room) counts as having seen it.
+    if ((next.kind === 'briefing' || next.kind === 'chat' || next.kind === 'room') && progress.visit(next.stop)) ui.setProgress(progress);
 
     // Into and out of a room: swap the interior in, and on the way out put the plane back on the
     // stop's holding circle (the lift "returns you to the plane"), before any autopilot starts.
@@ -204,8 +265,20 @@ export function startApp(): void {
           loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
           snapCamera(loaded);
         }
-      } else if (next.kind === 'flying') {
+      } else if (next.kind === 'flying' || next.kind === 'autopilot') {
+        // Free flight, or the tour setting off for its first stop.
         loaded.sim.reset({ ...spawnPoint(content, loaded.world.meta), speed: 55 });
+        snapCamera(loaded);
+      }
+    }
+
+    // A jump (browser Back or Forward) opens a stop without flying there: cut through black and put
+    // the plane on that stop's holding circle, unless it is already circling it.
+    if (event.type === 'JUMP' && loaded && holdingAt(next) && holdingAt(prev) !== holdingAt(next)) {
+      const stop = placement(event.stop);
+      if (stop) {
+        ui.flash();
+        loaded.sim.reset({ ...holdingPosition(stop), speed: 50 });
         snapCamera(loaded);
       }
     }
@@ -281,6 +354,12 @@ export function startApp(): void {
     return content.stops.find((s) => s.hotkey === Number(m[1]))?.id ?? null;
   }
 
+  /** N in a briefing: on to the next stop not yet seen (the same place the panel's button leads). */
+  function flyOnward(from: StopId) {
+    const to = onward(progress, from);
+    if (to) dispatch({ type: 'GO_TO_STOP', stop: to.stop });
+  }
+
   function onAction(action: InputAction) {
     const hot = stopForHotkey(action);
     switch (state.kind) {
@@ -325,6 +404,7 @@ export function startApp(): void {
         else if (action === 'prev') dispatch({ type: 'PAGE', delta: -1 });
         else if (action === 'back' || action === 'briefing') dispatch({ type: 'CLOSE_BRIEFING' });
         else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
+        else if (action === 'nextStop') flyOnward(state.stop);
         else if (hot) dispatch({ type: 'GO_TO_STOP', stop: hot });
         break;
       case 'chat':
@@ -335,6 +415,7 @@ export function startApp(): void {
           if (action === 'next') dispatch({ type: 'PAGE', delta: 1 });
           else if (action === 'prev') dispatch({ type: 'PAGE', delta: -1 });
           else if (action === 'back' || action === 'briefing' || action === 'interact') dispatch({ type: 'CLOSE_BRIEFING' });
+          else if (action === 'nextStop') flyOnward(state.stop);
         } else if (action === 'interact' || action === 'briefing') useRoomSpot();
         else if (action === 'back') dispatch({ type: 'LEAVE_ROOM' });
         else if (action === 'nav') dispatch({ type: 'OPEN_NAV' });
@@ -425,8 +506,8 @@ export function startApp(): void {
     },
   );
 
-  const deepLink = params.get('stop') as StopId | null;
-  if (deepLink && STOP_IDS.includes(deepLink)) dispatch({ type: 'GO_TO_STOP', stop: deepLink });
+  // A link to a stop, one of its pages or its room opens there once the world has loaded.
+  openRoute(urlRoute, 'GO_TO_STOP');
 
   /* ------------------------------------------------------------------- loop */
 
