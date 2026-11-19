@@ -1,0 +1,34 @@
+Copyright (c) 2026 Richman Tan. All rights reserved.
+
+This repository is public so that the work can be read. It is not open source.
+
+Except as set out below, no licence or other right is granted, by implication
+or otherwise, to copy, modify, publish, distribute, sublicense or sell any part
+of this repository: the source code, shaders, art, images, videos and written
+content. To ask for permission, use the contact details at
+https://richmantan.vercel.app/.
+
+Nothing here limits the rights that GitHub's Terms of Service give other users
+to view and fork public repositories on GitHub.
+
+Third-party material, which is not covered by the notice above and keeps its
+own terms:
+
+  - Map data. The files in public/map/ are a database derived from
+    OpenStreetMap data, (c) OpenStreetMap contributors, and are available
+    under the Open Database License (ODbL) 1.0:
+    https://opendatacommons.org/licenses/odbl/1-0/
+    Terrain and building heights in those files are derived from the Auckland
+    LiDAR 1m DEM and DSM (2024), Toitu Te Whenua Land Information New Zealand,
+    licensed under CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+  - Fonts. Jersey 10 and Departure Mono in public/fonts/ are licensed under
+    the SIL Open Font License 1.1. The licence texts are alongside them.
+
+  - Dependencies installed from npm are under their own licences.
+
+See ATTRIBUTION.md for the full attributions.
+
+THE SOFTWARE AND CONTENT ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY ARISING FROM THEM OR FROM THEIR USE.
