@@ -88,11 +88,7 @@ npm run map        # fetch (cached in data/), build public/map, check
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a build and the bundle check on every push to `master` and every pull request. The tests are plain Vitest in Node: the flight model, the autopilot flown headless to every stop on the real map, the state machine, routing, the content rules, the chat server and the map pipeline. There are no browser tests; the dev harnesses in `dev/*.html` are for looking at things by hand.
 
-The Vercel project is not connected to this repository, so a push does not deploy. Deploy from a clean checkout of `master`:
-
-```sh
-vercel --prod
-```
+The Vercel project is connected to this repository: a push to `master` builds and deploys to production, and other branches and pull requests get preview deployments. `vercel --prod` from a clean checkout still works for a manual deploy.
 
 Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the chat stays scripted.
 
