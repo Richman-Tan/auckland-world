@@ -6,6 +6,7 @@
 import { type Hotspot, SKY_DECK_SPOTS, hotspotPoint } from '../room/layout';
 import { detailLadder, lowDetailLevel } from '../shared/detail';
 import { applyPixelScale } from '../shared/pixelScale';
+import { chosenSolarHour, lookAtSolar } from '../shared/timeOfDay';
 import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
 import type { StopId } from '../content/types';
@@ -46,6 +47,7 @@ const CONTEXT_RESTORE_MS = 5000;
 const STOP_IDS: StopId[] = content.stops.map((s) => s.id);
 
 type FlightModule = typeof import('../flight/index');
+type Sound = import('../audio/index').Sound;
 type HoldView = ReturnType<FlightModule['createHoldView']>;
 type SkyDeck = import('../world/index').SkyDeck;
 
@@ -256,6 +258,14 @@ export function startApp(): void {
   function onEnter(prev: AppState, next: AppState, event: AppEvent) {
     if (next.kind === 'loading' && loaded) queueMicrotask(() => dispatch({ type: 'LOADED' }));
 
+    if (sound) {
+      if (prev.kind === 'autopilot' && (next.kind === 'briefing' || next.kind === 'chat')) sound.cue('arrive');
+      else if (next.kind === 'room' && prev.kind !== 'room' && prev.kind !== 'paused') sound.cue('land');
+      else if (next.kind === 'nav' && prev.kind === 'nav' && next.selected !== prev.selected) sound.cue('select');
+      else if (next.kind === 'briefing' && prev.kind === 'briefing' && next.stop === prev.stop && next.page !== prev.page) sound.cue('page');
+      else if (next.kind === 'room' && prev.kind === 'room' && next.panel !== prev.panel && next.panel !== null) sound.cue('page');
+    }
+
     // Opening a stop in any form (briefing, chat, room) counts as having seen it.
     if ((next.kind === 'briefing' || next.kind === 'chat' || next.kind === 'room') && progress.visit(next.stop)) ui.setProgress(progress);
 
@@ -462,6 +472,7 @@ export function startApp(): void {
   }
 
   document.addEventListener('visibilitychange', () => {
+    sound?.setActive(!document.hidden);
     if (document.hidden) dispatch({ type: 'PAUSE', reason: 'hidden' });
     else if (state.kind === 'paused' && state.reason === 'hidden') dispatch({ type: 'RESUME' });
   });
@@ -501,8 +512,60 @@ export function startApp(): void {
     setDetailLevel(g === 'low' ? lowDetailLevel(ladder) : 0);
   }
 
+  /* ------------------------------------------------------------------- sound */
+
+  // Off by default. The synthesiser is its own chunk, fetched the first time sound is switched on.
+  let sound: Sound | null = null;
+  let soundLoading = false;
+  async function startSound() {
+    if (sound || soundLoading || !settings.get().sound) return;
+    soundLoading = true;
+    try {
+      sound = (await import('../audio/index')).createSound();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      soundLoading = false;
+    }
+    // Switched off again while the chunk was loading.
+    if (!settings.get().sound) stopSound();
+  }
+  function stopSound() {
+    sound?.dispose();
+    sound = null;
+  }
+  // Remembered as on from an earlier visit: browsers only let audio start from a click or key press.
+  if (settings.get().sound) {
+    const onGesture = () => {
+      removeEventListener('pointerdown', onGesture);
+      removeEventListener('keydown', onGesture);
+      void startSound();
+    };
+    addEventListener('pointerdown', onGesture);
+    addEventListener('keydown', onGesture);
+  }
+
+  /* ------------------------------------------------------------- time of day */
+
+  /** Seconds until the look is next refreshed from the clock (it only moves on Auto). */
+  let lookTimer = 0;
+  /** Sky, light and water for the chosen time: ?time=, else the setting, else the real hour in Auckland. */
+  function applyLook() {
+    if (!loaded) return;
+    const look = lookAtSolar(chosenSolarHour(settings.get().time, params.get('time'), new Date()));
+    loaded.world.setLook(look);
+    loaded.plane.setTint(look.ambient);
+    lookTimer = 30;
+    redraw();
+  }
+
   settings.subscribe((now, before) => {
     if (now.graphics !== before.graphics) applyGraphics();
+    if (now.time !== before.time) applyLook();
+    if (now.sound !== before.sound) {
+      if (now.sound) void startSound();
+      else stopSound();
+    }
     if (now.motion !== before.motion) applyMotion();
     if (now.invertPitch !== before.invertPitch) input?.setInvertPitch(now.invertPitch);
     redraw();
@@ -562,6 +625,7 @@ export function startApp(): void {
       loaded = l;
       applyGraphics();
       applyMotion();
+      applyLook();
       if (state.kind === 'loading') dispatch({ type: 'LOADED' });
       requestAnimationFrame(frame);
     },
@@ -649,6 +713,15 @@ export function startApp(): void {
     const dt = Math.min(0.1, frameS);
     last = now;
     input?.poll();
+    // On Auto the sun keeps moving with the real clock; half a minute is finer than the eye can tell.
+    lookTimer -= dt;
+    if (lookTimer <= 0) applyLook();
+
+    if (sound) {
+      const scene =
+        state.kind === 'flying' || state.kind === 'autopilot' ? 'flight' : state.kind === 'briefing' || state.kind === 'chat' ? 'hold' : state.kind === 'room' ? 'room' : 'silent';
+      sound.update(scene, l.sim.state.speed, l.sim.state.boosting);
+    }
 
     // Nothing moves under the pause menu: draw a couple of frames to settle, then stop until it
     // closes (or the window or a setting changes) instead of redrawing a still picture 60 times a second.
@@ -709,6 +782,7 @@ export function startApp(): void {
           if (res.respawned) ui.toast('Recovered to a safe altitude.', 'warn');
           else if (res.collided && toastCooldown <= 0) {
             ui.toast('Bump!', 'warn');
+            sound?.cue('bump');
             toastCooldown = 1.5;
           }
           if (res.outOfBounds && toastCooldown <= 0) {

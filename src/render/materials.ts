@@ -59,6 +59,17 @@ uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
 uniform vec3 uZenith;
 uniform vec3 uSunColor;
+uniform vec3 uDiscColor;
+uniform float uCloud;
+
+// Smooth value noise from the shared hash, for the cloud bands.
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 void main() {
   vec4 v = uInvProj * vec4(vNdc, 1.0, 1.0);
   vec3 dir = normalize((uCamWorld * vec4(v.xyz / v.w, 0.0)).xyz);
@@ -67,6 +78,31 @@ void main() {
   float t = pow(e, 0.5);
   t = floor(t * 7.0 + b) / 7.0;
   vec3 col = mix(uFogColor, uZenith, clamp(t, 0.0, 1.0));
+
+  // Stars: one pixel each, on a grid fixed to the sky, a few of them twinkling. Night only.
+  if (uNight > 0.01 && dir.y > 0.02) {
+    vec2 sp = dir.xz / (dir.y + 0.25) * 60.0;
+    float h = hash21(floor(sp));
+    vec2 f = abs(fract(sp) - 0.5);
+    // one screen pixel on each axis, however the grid is stretched towards the horizon
+    float dot1 = step(f.x, fwidth(sp.x) * 0.6) * step(f.y, fwidth(sp.y) * 0.6);
+    float twinkle = 0.55 + 0.45 * step(0.5, fract(h * 91.0 + uTime * 0.35));
+    // sparse, and only once it is properly dark (not at dusk)
+    float star = step(0.955, h) * dot1 * twinkle * smoothstep(0.45, 0.95, uNight) * smoothstep(0.06, 0.4, dir.y);
+    col = mix(col, vec3(0.92, 0.95, 1.0), star);
+  }
+
+  // Clouds: two bands of drifting noise in three dithered steps, taking their colour from the
+  // horizon and the sun so they turn gold at dusk and grey-blue at night.
+  if (uCloud > 0.01 && dir.y > 0.0) {
+    vec2 cp = dir.xz / (dir.y + 0.12);
+    float n = vnoise(cp * 1.3 + vec2(uTime * 0.006, 0.0)) * 0.65 + vnoise(cp * 3.1 - vec2(uTime * 0.01, uTime * 0.004)) * 0.35;
+    float th = mix(0.85, 0.35, uCloud);
+    float cover = smoothstep(th, th + 0.18, n) * smoothstep(0.0, 0.12, dir.y);
+    cover = floor(cover * 3.0 + b) / 3.0;
+    col = mix(col, mix(uFogColor, uSunColor, 0.45), clamp(cover, 0.0, 1.0) * 0.85);
+  }
+
   float s = dot(dir, uSunDir);
   float glow = smoothstep(0.80, 0.995, s);
   glow = floor(glow * 4.0 + b * 0.8) / 4.0;
@@ -74,7 +110,7 @@ void main() {
   float disc = step(0.9988, s);
   float ring = step(0.9965, s);
   col = mix(col, uSunColor, ring * 0.55);
-  col = mix(col, vec3(1.0, 0.97, 0.85), disc);
+  col = mix(col, uDiscColor, disc);
   outColor = vec4(col, 1.0);
 }`,
     {
@@ -82,6 +118,8 @@ void main() {
       uCamWorld: { value: new Matrix4() },
       uZenith: { value: col(SKY.zenith) },
       uSunColor: { value: col(SKY.sun) },
+      uDiscColor: { value: new Color(1.0, 0.97, 0.85) },
+      uCloud: { value: 0 },
     },
     { depthTest: false, depthWrite: false, side: FrontSide },
   );
@@ -103,7 +141,7 @@ void main() {
   vec4 t = texture(uGround, vUv);
   if (t.a < 0.5) discard;
   vec3 n = flatNormal(vWorld);
-  vec3 lit = mix(vec3(1.0), lambert3(n), 0.45);
+  vec3 lit = mix(uAmbient, lambert3(n), 0.45);
   vec3 c = t.rgb * lit;
   float d = length(vWorld - cameraPosition);
   outColor = vec4(pixelFog(c, d, 1.0), 1.0);
@@ -127,7 +165,7 @@ void main() {
   vec4 t = textureLod(uGround, clamp(vUv, 0.001, 0.999), 6.0);
   if (t.a < 0.5) discard;
   vec3 n = flatNormal(vWorld);
-  vec3 c = t.rgb * mix(vec3(1.0), lambert3(n), 0.45) * 0.92;
+  vec3 c = t.rgb * mix(uAmbient, lambert3(n), 0.45) * 0.92;
   float d = length(vWorld - cameraPosition);
   outColor = vec4(pixelFog(c, d * 1.35, 1.0), 1.0);
 }`,
@@ -185,7 +223,7 @@ void main() {
   // a thin solid fringe, and a faint moving band just outside it
   float foam = step(0.05, nearL) + (1.0 - step(0.05, nearL)) * step(0.05, farL) * band * 0.45;
   foam *= 1.0 - smoothstep(1400.0, 2400.0, dist);
-  c = mix(c, uFoam, clamp(foam, 0.0, 1.0));
+  c = mix(c, uFoam * uAmbient, clamp(foam, 0.0, 1.0));
 
   // sparse sparkles
   float h = hash21(floor(p / 4.0) + floor(t * 4.0) * 17.0);
@@ -193,7 +231,8 @@ void main() {
   float glint = max(dot(R, uSunDir), 0.0);
   float thr = 0.9993 - 0.004 * step(0.7, glint) - 0.004 * step(0.9, glint);
   float spark = step(thr, h) * (1.0 - smoothstep(300.0, 1100.0, dist));
-  c = mix(c, uSparkle, spark);
+  // sun glitter fades out with the daylight
+  c = mix(c, uSparkle, spark * (1.0 - uNight));
 
   // lighter towards the horizon
   float up = clamp(V.y, 0.0, 1.0);
@@ -250,12 +289,15 @@ void main() {
     float win = step(0.18, f.x) * step(f.x, 0.82) * step(0.28, f.y) * step(f.y, 0.80);
     float fw = max(fwidth(cell.x), fwidth(cell.y));
     float fade = 1.0 - smoothstep(0.22, 0.5, fw);
-    float lit = step(0.86, hash21(floor(cell)));
+    // About one window in seven is lit in the afternoon; by night half of them are.
+    float lit = step(mix(0.86, 0.5, uNight), hash21(floor(cell)));
     vec3 glass = mix(alb * 0.42, vec3(0.16, 0.34, 0.38), 0.65);
     glass = mix(glass, vec3(1.0, 0.82, 0.45), lit * 0.8);
     vec3 wc = mix(alb * shade, glass * mix(shade, vec3(1.0), lit), win);
-    // far away the pattern averages out to a slightly darker wall
-    c = mix(alb * shade * 0.9, wc, fade);
+    // far away the pattern averages out to a slightly darker wall, with a warm lift from the lit
+    // windows at night so distant towers still read as occupied
+    vec3 farC = alb * shade * 0.9 + vec3(0.5, 0.38, 0.18) * (uNight * 0.24);
+    c = mix(farC, wc, fade);
   }
   outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
 }`,
@@ -266,10 +308,13 @@ void main() {
 /* --------------------------------------------------------------- landmarks */
 
 /**
- * Vertex-coloured, flat-lit. colour.a = 1 is normal; a ~ 0.5 marks the blinking aircraft light.
- * `fogCap` limits the fog amount (Rangitoto keeps a readable silhouette).
+ * Vertex-coloured, flat-lit. The colour's alpha says what kind of surface it is (see the ALPHA_*
+ * constants in world/landmarks/builder.ts): 1 is normal, ~0.5 the blinking aircraft light, ~0.69 a
+ * window band and ~0.82 a floodlit face. The last two look ordinary by day and light up at night.
+ * `fogCap` limits the fog amount (Rangitoto keeps a readable silhouette). `interior` marks a room,
+ * which is lit by its own lamps whatever the hour.
  */
-export function createLandmarkMaterial(shared: SharedUniforms, fogCap = 1.0): ShaderMaterial {
+export function createLandmarkMaterial(shared: SharedUniforms, fogCap = 1.0, interior = false): ShaderMaterial {
   return make(
     shared,
     /* glsl */ `
@@ -286,9 +331,10 @@ void main() {
 in vec3 vWorld;
 in vec4 vColor;
 uniform float uFogCap;
+uniform float uInterior;
 void main() {
   float dist = length(vWorld - cameraPosition);
-  if (vColor.a < 0.9) {
+  if (vColor.a < 0.6) {
     float blink = step(0.55, fract(uTime * 0.8));
     vec3 e = mix(vec3(0.25, 0.02, 0.03), vec3(1.0, 0.18, 0.15), blink);
     outColor = vec4(e, 1.0);
@@ -296,9 +342,58 @@ void main() {
   }
   vec3 n = flatNormal(vWorld);
   vec3 c = vColor.rgb * lambert3(n);
+  vec3 lamp = vColor.rgb * vec3(1.06, 1.0, 0.9);
+  if (vColor.a < 0.9) {
+    // window bands glow warm at night; floodlit faces show in their own light instead of the moon's
+    c = mix(c, vColor.a < 0.75 ? vec3(1.0, 0.82, 0.45) : lamp, uNight);
+  }
+  c = mix(c, lamp, uInterior * uNight);
   outColor = vec4(pixelFog(c, dist, uFogCap), 1.0);
 }`,
-    { uFogCap: { value: fogCap } },
+    { uFogCap: { value: fogCap }, uInterior: { value: interior ? 1 : 0 } },
+  );
+}
+
+/* ----------------------------------------------------------------- ambient */
+
+/**
+ * Boats and bridge traffic: instanced box models (render/boxes.ts with display colours), flat-lit and
+ * fogged like everything else. aGlow marks a model's lamps, which are just paint by day and shine
+ * at night: 1 a white head or mast light, 2 a red tail light, 3 a warm cabin window. An instance
+ * colour, when the mesh has one, tints the paint but not the lamps.
+ */
+export function createAmbientMaterial(shared: SharedUniforms): ShaderMaterial {
+  return make(
+    shared,
+    /* glsl */ `
+in vec3 aTint;
+in float aGlow;
+out vec3 vWorld;
+out vec3 vColor;
+out float vGlow;
+void main() {
+  vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  vWorld = wp.xyz;
+  vGlow = aGlow;
+  vColor = aTint;
+#ifdef USE_INSTANCING_COLOR
+  if (aGlow < 0.5) vColor *= instanceColor;
+#endif
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    /* glsl */ `
+in vec3 vWorld;
+in vec3 vColor;
+in float vGlow;
+void main() {
+  float dist = length(vWorld - cameraPosition);
+  vec3 c = vColor * lambert3(flatNormal(vWorld));
+  if (vGlow > 0.5) {
+    vec3 lamp = vGlow < 1.5 ? vec3(1.0, 0.96, 0.78) : (vGlow < 2.5 ? vec3(1.0, 0.16, 0.12) : vec3(1.0, 0.82, 0.45));
+    c = mix(c, lamp, uNight);
+  }
+  outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
+}`,
   );
 }
 

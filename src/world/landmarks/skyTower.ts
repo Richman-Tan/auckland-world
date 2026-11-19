@@ -2,7 +2,7 @@
 import { type BufferGeometry } from 'three';
 import { SKY_TOWER as S } from '../../shared/collision';
 import type { MapMeta } from '../../shared/mapFormat';
-import { MeshBuilder, type V3 } from './builder';
+import { ALPHA_BLINK, ALPHA_FLOOD, ALPHA_WINDOW, MeshBuilder, type V3 } from './builder';
 
 const CONCRETE = '#cfc8b8';
 const CONCRETE_DARK = '#b3aea4';
@@ -34,25 +34,26 @@ export function buildSkyTower(meta: MapMeta): BufferGeometry {
   // pod stack: flared underside, light rim, dark window band, light rim, tapering top
   const r = S.podRadius;
   const pb = g + S.podBottom;
-  b.frustum(x, z, pb, pb + 6, S.shaftRadius + 1, r, 12, POD_LIGHT, { capBottom: true });
-  b.frustum(x, z, pb + 6, pb + 10, r, r, 12, POD_LIGHT);
-  b.frustum(x, z, pb + 10, pb + 24, r, r, 12, GLASS);
-  b.frustum(x, z, pb + 24, pb + 28, r, r, 12, POD_LIGHT);
-  b.frustum(x, z, pb + 28, g + S.podTop, r, S.upperShaftRadius + 1, 12, POD_LIGHT, { capBottom: true });
+  // At night the pod and mast are floodlit and the observation decks glow, as the real tower does.
+  b.frustum(x, z, pb, pb + 6, S.shaftRadius + 1, r, 12, POD_LIGHT, { capBottom: true, alpha: ALPHA_FLOOD });
+  b.frustum(x, z, pb + 6, pb + 10, r, r, 12, POD_LIGHT, { alpha: ALPHA_FLOOD });
+  b.frustum(x, z, pb + 10, pb + 24, r, r, 12, GLASS, { alpha: ALPHA_WINDOW });
+  b.frustum(x, z, pb + 24, pb + 28, r, r, 12, POD_LIGHT, { alpha: ALPHA_FLOOD });
+  b.frustum(x, z, pb + 28, g + S.podTop, r, S.upperShaftRadius + 1, 12, POD_LIGHT, { capBottom: true, alpha: ALPHA_FLOOD });
 
   // upper shaft, with an antenna platform ring
-  b.frustum(x, z, g + S.podTop, g + S.upperShaftTop, S.upperShaftRadius, S.upperShaftRadius, 8, CONCRETE);
-  b.frustum(x, z, g + S.upperShaftTop - 16, g + S.upperShaftTop - 11, 7, 7, 8, POD_LIGHT, { capTop: true, capBottom: true });
+  b.frustum(x, z, g + S.podTop, g + S.upperShaftTop, S.upperShaftRadius, S.upperShaftRadius, 8, CONCRETE, { alpha: ALPHA_FLOOD });
+  b.frustum(x, z, g + S.upperShaftTop - 16, g + S.upperShaftTop - 11, 7, 7, 8, POD_LIGHT, { capTop: true, capBottom: true, alpha: ALPHA_FLOOD });
 
   // mast, banded white and red
   const y0 = g + S.upperShaftTop;
   const y1 = g + S.height;
   const band = 8;
   for (let y = y0, k = 0; y < y1; y += band, k++) {
-    b.frustum(x, z, y, Math.min(y + band, y1), S.mastRadius, S.mastRadius, 8, k % 2 ? MAST_RED : MAST_WHITE, { capTop: y + band >= y1 });
+    b.frustum(x, z, y, Math.min(y + band, y1), S.mastRadius, S.mastRadius, 8, k % 2 ? MAST_RED : MAST_WHITE, { capTop: y + band >= y1, alpha: ALPHA_FLOOD });
   }
 
-  // aircraft light on top (alpha ~128 marks it as the blinking emissive)
+  // aircraft light on top (ALPHA_BLINK marks it as the blinking emissive)
   const top = y1 + 0.2;
   const ref: V3 = [x, top + 1.5, z];
   const lx = 2.2;
@@ -65,7 +66,7 @@ export function buildSkyTower(meta: MapMeta): BufferGeometry {
   const faces: [number, number, number, number][] = [
     [4, 5, 6, 7], [0, 1, 2, 3], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
   ];
-  for (const f of faces) b.quad(corners[f[0]], corners[f[1]], corners[f[2]], corners[f[3]], ref, '#ff2a2a', 128);
+  for (const f of faces) b.quad(corners[f[0]], corners[f[1]], corners[f[2]], corners[f[3]], ref, '#ff2a2a', ALPHA_BLINK);
 
   return b.build();
 }

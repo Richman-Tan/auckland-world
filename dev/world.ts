@@ -3,6 +3,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { placeStops } from '../src/app/placement';
 import type { QualityTier, WorldScene } from '../src/app/contracts';
 import { content } from '../src/content/index';
+import { chosenSolarHour, lookAtSolar } from '../src/shared/timeOfDay';
 import { loadWorld } from '../src/world/index';
 
 const params = new URLSearchParams(location.search);
@@ -88,8 +89,20 @@ async function main() {
   if (v) lookAt(v.from, v.to);
   else lookAt([-600, 200, 600], [-88, 150, -85]);
 
+  // ?time=<solar hour or preset>; [ and ] scrub half an hour at a time.
+  let solar = chosenSolarHour('afternoon', params.get('time'), new Date());
+  const setTime = (h: number) => {
+    solar = ((h % 24) + 24) % 24;
+    world?.setLook(lookAtSolar(solar));
+  };
+  setTime(solar);
+  addEventListener('keydown', (e) => {
+    if (e.code === 'BracketLeft') setTime(solar - 0.5);
+    if (e.code === 'BracketRight') setTime(solar + 0.5);
+  });
+
   const w = window as unknown as Record<string, unknown>;
-  w.__world = { world, camera, stops, loadMs, lookAt, VIEWS };
+  w.__world = { world, camera, stops, loadMs, lookAt, VIEWS, setTime };
 
   let last = performance.now();
   let hudAcc = 0;
@@ -122,7 +135,8 @@ async function main() {
         `draws ${s.drawCalls}  tris ${(s.triangles / 1000).toFixed(0)}k\n` +
         `${s.internalWidth}x${s.internalHeight} @ x${s.pixelScale}\n` +
         `pos ${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)}\n` +
-        `load ${(loadMs / 1000).toFixed(2)} s  ${baseUrl}`;
+        `load ${(loadMs / 1000).toFixed(2)} s  ${baseUrl}\n` +
+        `solar ${solar.toFixed(1)} h  ([ ] to scrub)`;
     }
     requestAnimationFrame(loop);
   };

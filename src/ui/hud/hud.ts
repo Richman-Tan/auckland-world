@@ -1,5 +1,6 @@
 /** The flight HUD: compass, bottom deck, prompt, off-screen arrow, pull-up warning, toasts. */
 import type { AppEvent, PromptInfo, Telemetry, UiWorld } from '../../app/contracts';
+import type { SettingsStore } from '../../app/settings';
 import { h, setHidden, setText } from '../dom';
 import { edgeArrow, formatDistance, hudLine } from '../format';
 import { drawRadar } from '../minimap';
@@ -22,7 +23,7 @@ export interface Hud {
   setPixelScale(px: number): void;
 }
 
-export function createHud(dispatch: (e: AppEvent) => void, now: () => number = () => performance.now()): Hud {
+export function createHud(dispatch: (e: AppEvent) => void, settings?: SettingsStore, now: () => number = () => performance.now()): Hud {
   let px = 3;
   let world: UiWorld | null = null;
   let minimap: HTMLImageElement | null = null;
@@ -77,7 +78,20 @@ export function createHud(dispatch: (e: AppEvent) => void, now: () => number = (
   // single tap on a phone (the key hints are hidden on touch screens by CSS).
   const prompt = h('div', { class: 'aw-prompt', role: 'group', hidden: true });
 
-  const el = h('div', { class: 'aw-hud', hidden: true }, compassWrap, apChip, deck, pullUp, arrow, prompt, toasts);
+  // Sound is off until asked for; this is the quick way to it (the pause menu has the same switch).
+  const soundBtn = settings ? h('button', { class: 'aw-hud__sound', type: 'button' }) : null;
+  if (settings && soundBtn) {
+    const paint = () => {
+      const on = settings.get().sound;
+      soundBtn.textContent = on ? 'Sound on' : 'Sound off';
+      soundBtn.setAttribute('aria-pressed', String(on));
+    };
+    soundBtn.addEventListener('click', () => settings.set({ sound: !settings.get().sound }));
+    settings.subscribe(paint);
+    paint();
+  }
+
+  const el = h('div', { class: 'aw-hud', hidden: true }, compassWrap, apChip, deck, pullUp, arrow, prompt, toasts, soundBtn);
 
 
   const cctx = compass.getContext('2d');

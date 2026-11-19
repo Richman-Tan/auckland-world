@@ -17,6 +17,7 @@ import type { SiteContent, StopId } from '../content/types';
 import type { MapMeta } from '../shared/mapFormat';
 import type { WorldQuery } from '../shared/collision';
 import type { PaletteKey } from '../shared/palette';
+import type { Look } from '../shared/timeOfDay';
 import type { AppEvent, AppState, AutopilotPhase } from './fsm';
 import type { ProgressView } from './progress';
 import type { SettingsStore } from './settings';
@@ -150,6 +151,8 @@ export interface PlaneModel {
   readonly object: Object3D;
   /** Pose the model from the (interpolated) flight state; time for propeller/lights. */
   update(state: FlightState, time: number): void;
+  /** Dim the paint to match the light (the plane is unlit): white by day, moonlit blue at night. */
+  setTint(rgb: readonly [number, number, number]): void;
 }
 
 /* ------------------------------------------------------------------ input */
@@ -228,6 +231,8 @@ export interface WorldScene {
   render(camera: Camera): void;
   /** Call on window resize; returns the internal (low-res) size. */
   resize(cssWidth: number, cssHeight: number): { width: number; height: number };
+  /** Sky, light, fog and water colours for the time of day (src/shared/timeOfDay.ts). */
+  setLook(look: Look): void;
   /** Change draw distance and render resolution on the fly (the frame-rate governor, or a pinned setting). */
   setDetail(d: WorldDetail): void;
   /** The browser took the WebGL context away (true) or gave it back (false). Rendering pauses in between. */

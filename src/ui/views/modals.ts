@@ -21,6 +21,18 @@ const SETTING_ROWS: SettingRow[] = [
     note: 'Auto lowers the detail while frames are slow and gives it back when they recover.',
   }),
   row({
+    key: 'time',
+    label: 'Time of day',
+    options: [['auto', 'Auto'], ['morning', 'Morning'], ['afternoon', 'Afternoon'], ['dusk', 'Dusk'], ['night', 'Night']],
+    note: 'Auto is the real time in Auckland right now.',
+  }),
+  row({
+    key: 'sound',
+    label: 'Sound',
+    options: [[false, 'Off'], [true, 'On']],
+    note: 'An engine note, wind and a few cues, made in the browser.',
+  }),
+  row({
     key: 'invertPitch',
     label: 'W, or stick up',
     options: [[false, 'Dives'], [true, 'Climbs']],

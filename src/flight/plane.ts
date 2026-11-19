@@ -6,8 +6,9 @@
  * propeller, the two blinking nav lights, the boost flame) are separate. That is 4 draw calls in
  * level flight instead of one per box.
  */
-import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshBasicMaterial } from 'three';
+import { Group, Mesh, MeshBasicMaterial, SRGBColorSpace } from 'three';
 import type { FlightState, PlaneModel } from '../app/contracts';
+import { type Box, mergeBoxes } from '../render/boxes';
 
 const RED = 0xd7263d;
 const RED_DARK = 0x9c1a2c;
@@ -16,52 +17,6 @@ const CREAM_DARK = 0xc9bfa6;
 const TEAL = 0x0f4c5c;
 const TEAL_LIGHT = 0x2a7f8f;
 const DARK = 0x22252b;
-
-/** width, height, depth, centre x, y, z, colour. */
-type Box = [w: number, h: number, d: number, x: number, y: number, z: number, color: number];
-
-// Corner signs of a box, and its 12 triangles wound to face outwards.
-const CORNERS = [
-  [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-  [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
-] as const;
-const FACES = [
-  0, 2, 1, 0, 3, 2, // -z
-  4, 5, 6, 4, 6, 7, // +z
-  0, 1, 5, 0, 5, 4, // -y
-  3, 7, 6, 3, 6, 2, // +y
-  0, 4, 7, 0, 7, 3, // -x
-  1, 2, 6, 1, 6, 5, // +x
-] as const;
-
-/** One geometry for a set of boxes, coloured per vertex. */
-export function mergeBoxes(boxes: readonly Box[]): BufferGeometry {
-  const positions = new Float32Array(boxes.length * 8 * 3);
-  const colors = new Float32Array(boxes.length * 8 * 3);
-  const indices = new Uint16Array(boxes.length * 36);
-  const c = new Color();
-  boxes.forEach(([w, h, d, x, y, z, color], b) => {
-    // Color converts the sRGB hex to the linear working space, the same as a material colour would.
-    c.set(color);
-    CORNERS.forEach(([sx, sy, sz], i) => {
-      const o = (b * 8 + i) * 3;
-      positions[o] = x + (sx * w) / 2;
-      positions[o + 1] = y + (sy * h) / 2;
-      positions[o + 2] = z + (sz * d) / 2;
-      colors[o] = c.r;
-      colors[o + 1] = c.g;
-      colors[o + 2] = c.b;
-    });
-    FACES.forEach((f, i) => (indices[b * 36 + i] = b * 8 + f));
-  });
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(positions, 3));
-  g.setAttribute('color', new BufferAttribute(colors, 3));
-  g.setIndex(new BufferAttribute(indices, 1));
-  g.computeBoundingBox();
-  g.computeBoundingSphere();
-  return g;
-}
 
 const AIRFRAME: readonly Box[] = [
   // fuselage: red top, darker belly, cream cowl
@@ -137,6 +92,10 @@ export function createPlane(): PlaneModel {
 
   return {
     object: root,
+    setTint(rgb) {
+      // The tint is authored like the shaders' light colours, as a multiplier on displayed colour.
+      paint.color.setRGB(Math.min(rgb[0], 1), Math.min(rgb[1], 1), Math.min(rgb[2], 1), SRGBColorSpace);
+    },
     update(s: FlightState, time: number) {
       root.position.set(s.pos.x, s.pos.y, s.pos.z);
       // yaw, then pitch, then bank (order YXZ). Nose is -z: yaw = -heading, pitch up = +x rotation,

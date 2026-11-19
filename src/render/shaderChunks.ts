@@ -7,6 +7,11 @@ uniform vec3 uSunDir;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+uniform vec3 uLightHi;
+uniform vec3 uLightMid;
+uniform vec3 uLightLo;
+uniform vec3 uAmbient;
+uniform float uNight;
 `;
 
 export const FRAG_OUT = /* glsl */ `
@@ -33,12 +38,13 @@ vec3 flatNormal(vec3 worldPos) {
   return normalize(cross(dFdx(worldPos), dFdy(worldPos)));
 }
 
-// Late-afternoon light, three steps: warm sun, soft mid, cool shadow.
+// Three steps of light: facing the sun (or moon), side-on, facing away. The colours come from the
+// time of day (shared/timeOfDay.ts); in the afternoon they are a warm sun, a soft mid and a cool shadow.
 vec3 lambert3(vec3 n) {
   float l = dot(n, uSunDir);
-  if (l > 0.45) return vec3(1.08, 1.02, 0.9);
-  if (l > -0.15) return vec3(0.86, 0.86, 0.9);
-  return vec3(0.62, 0.68, 0.8);
+  if (l > 0.45) return uLightHi;
+  if (l > -0.15) return uLightMid;
+  return uLightLo;
 }
 
 float hash21(vec2 p) {

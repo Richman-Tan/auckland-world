@@ -26,7 +26,7 @@ export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi
 
   const title = createTitleView(content, dispatch);
   const loading = createLoadingView();
-  const hud = createHud(dispatch);
+  const hud = createHud(dispatch, settings);
   const warp = createWarp();
   const nav = createNavView(content, dispatch);
   const briefing = createBriefingView(content, dispatch);

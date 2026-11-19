@@ -19,6 +19,8 @@ import type { StopId } from '../content/types';
 import type { WorldQuery } from '../shared/collision';
 import { FOG_FAR } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
+import type { Look } from '../shared/timeOfDay';
+import { type Ambient, createAmbient } from '../world/ambient';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
@@ -34,7 +36,7 @@ import {
   createWaterMaterial,
 } from './materials';
 import { PixelRenderer } from './pixelRenderer';
-import { type SharedUniforms, createSharedUniforms } from './uniforms';
+import { type SharedUniforms, applyLook, createSharedUniforms } from './uniforms';
 
 export { FOG_FAR } from '../shared/detail';
 /** Rangitoto is drawn at most this far from the camera (inside the 3500 m far plane), scaled to keep its angular size. */
@@ -71,8 +73,10 @@ export class WorldSceneImpl implements WorldScene {
   private rangitoto: Mesh;
   private rangitotoBase = new Vector3();
   private sky: Mesh;
+  private water: Mesh;
   private fogFar: number;
   private skyDeck: Mesh;
+  private ambient: Ambient;
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
@@ -124,6 +128,7 @@ export class WorldSceneImpl implements WorldScene {
     water.frustumCulled = false;
     water.renderOrder = 10;
     water.name = 'water';
+    this.water = water;
     this.scene.add(water);
 
     // Buildings: one mesh per 1 km chunk.
@@ -145,8 +150,9 @@ export class WorldSceneImpl implements WorldScene {
     const tower = new Mesh(track(buildSkyTower(meta)), lmMat);
     tower.name = 'sky-tower';
     this.scene.add(tower);
-    // The Sky Deck interior, shown only while visiting.
-    this.skyDeck = new Mesh(track(buildSkyDeck(meta)), lmMat);
+    // The Sky Deck interior, shown only while visiting. Its own material: a room is lit by its own
+    // lamps at night, not by the moon.
+    this.skyDeck = new Mesh(track(buildSkyDeck(meta)), track(createLandmarkMaterial(sh, 1, true)));
     this.skyDeck.name = 'sky-deck';
     this.skyDeck.visible = false;
     this.scene.add(this.skyDeck);
@@ -165,6 +171,10 @@ export class WorldSceneImpl implements WorldScene {
     this.beacons = new Beacons(sh);
     this.disposables.push(this.beacons);
     this.scene.add(this.beacons.group);
+
+    // Ferries and bridge traffic.
+    this.ambient = track(createAmbient(meta, parts.query, sh, parts.quality));
+    this.scene.add(this.ambient.group);
   }
 
   /** Compile all shaders once, off the critical path. */
@@ -196,6 +206,7 @@ export class WorldSceneImpl implements WorldScene {
   update(dt: number, time: number, camera: Camera): void {
     this.shared.uTime.value = time;
     this.beacons.update(dt);
+    this.ambient.update(time);
     camera.getWorldPosition(this.tmp);
     const cp = this.tmp;
     // Skip chunks entirely inside fully-fogged distance.
@@ -229,6 +240,18 @@ export class WorldSceneImpl implements WorldScene {
       if (dt > 0) this.fps += (1000 / dt - this.fps) * 0.1;
     }
     this.lastRender = t1;
+  }
+
+  setLook(look: Look): void {
+    applyLook(this.shared, look);
+    const sky = (this.sky.material as ShaderMaterial).uniforms;
+    sky.uZenith.value.setRGB(...look.zenith);
+    sky.uSunColor.value.setRGB(...look.sun);
+    sky.uDiscColor.value.setRGB(...look.disc);
+    sky.uCloud.value = look.cloud;
+    const water = (this.water.material as ShaderMaterial).uniforms;
+    water.uDeep.value.setRGB(...look.waterDeep);
+    water.uShallow.value.setRGB(...look.waterShallow);
   }
 
   setDetail(d: WorldDetail): void {

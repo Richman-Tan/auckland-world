@@ -9,7 +9,7 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 ```sh
 nvm use            # Node 22
 npm install
-npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to open a stop, ?quality=low|high, ?debug for window.__aw)
+npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to open a stop, ?quality=low|high, ?time=22 or ?time=dusk, ?debug for window.__aw)
 npm run typecheck  # src, scripts, api and the dev harnesses
 npm test
 npm run build      # typecheck, then vite build (this is what Vercel runs)
@@ -30,14 +30,15 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a bui
 ## Layout
 
 - `src/app/` state machine, contracts, stop placement and the app loop (`app.ts`)
-- `src/world/`, `src/render/` map loading, worker extrusion, low-res renderer, terrain, water, landmarks, beacons
+- `src/world/`, `src/render/` map loading, worker extrusion, low-res renderer, terrain, water, landmarks, beacons, ambient traffic
+- `src/audio/` the synthesised sound, loaded on demand
 - `src/flight/`, `src/input/` flight model, autopilot, orbit, proximity, chase camera, plane, keyboard/mouse/touch
 - `src/ui/` title, HUD, nav, briefing, chat, warp, pause and error views
 - `src/room/` the Sky Deck: layout and hotspots, walking, and the runtime (screens, signs, first-person camera); the room's mesh is `src/world/landmarks/skyDeck.ts`
 - `src/chat/` bridge chat: scripted matching, the AI backend (`remote.ts`), the `/api/chat` handler and its system prompt
 - `api/chat.ts` Vercel Node.js function for the AI chat; `api/_site.ts` is its generated prompt (`npm run chat:site`)
 - `src/content/` everything the site says (one source for the 3D view and `/page/`)
-- `src/shared/` binary map formats, collision, palette (shared by the pipeline and the runtime)
+- `src/shared/` binary map formats, collision, palette, time of day, detail ladder and ambient paths (pure; shared by the pipeline, the runtime and the tests)
 - `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
 - `dev/*.html` dev-only harnesses for the world, flight, UI and the social card (`dev/og.html`)
 
@@ -47,9 +48,17 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a bui
 - **Progress.** Opening a stop's briefing, chat or room marks it seen. The set is kept in `localStorage` (`aw:progress:v1`) and shown as ticks on the title and the destinations map; the site works the same with storage blocked.
 - **Links.** The address follows what is open (`src/app/route.ts`): `/?stop=projects`, `/?stop=projects&page=wie-academy`, `/?stop=projects&room=skydeck`, `/?stop=talk`. Moving to another stop adds a history entry and a page turn rewrites the current one, so the browser's Back and Forward walk the visit a stop at a time (cutting to the stop rather than flying). "Copy link" in a briefing copies the address, and without WebGL the same link leads to that spot on `/page/`.
 
+## A living city
+
+- **Time of day** (`src/shared/timeOfDay.ts`). The sky, the three steps of light, fog, water, window lights and stars all come from one `Look`, blended between keyframes on a solar clock where 6 is sunrise, 12 noon and 18 sunset. On Auto the real wall-clock time in Auckland is mapped onto that clock using the day's sunrise and sunset, so it is light at 8 pm in December and dark by 6 in June. The settings can pin Morning, Afternoon, Dusk or Night, and `?time=` takes a solar hour or one of those names (`?time=22`, `?time=dusk`). Afternoon is the look the site was first drawn in, and a test holds it to those colours.
+- **At night** about half of each tower's windows are lit, the Sky Tower's pod and mast are floodlit (faces marked with `ALPHA_FLOOD` or `ALPHA_WINDOW` in `src/world/landmarks/builder.ts`), the Sky Deck is lit from inside, and traffic shows head and tail lights.
+- **Ambient traffic** (`src/world/ambient.ts`, paths in `src/shared/ambientPaths.ts`): ferries on the Devonport and Bayswater runs, a boat that passes under the Harbour Bridge's main span, and cars on the bridge keeping left. Two instanced meshes, so two draw calls. A ferry route is only used if every point along it is over water on the loaded map, which is why the synthetic map gets no boats sailing over land. None of it can be hit.
+- **Sound** (`src/audio/index.ts`) is off until switched on, from the HUD or the settings. It is synthesised with Web Audio (an engine note and wind that follow the airspeed, a room hum on the Sky Deck, a few short cues), so there are no audio files; the module is its own chunk, fetched on first use.
+- `dev/world.html?map=real&view=bridge&time=18` previews any hour; `[` and `]` scrub half an hour at a time.
+
 ## Settings and performance
 
-- **Settings** live in the pause menu (Esc) and are kept in `localStorage` (`aw:settings:v1`, `src/app/settings.ts`): graphics (Auto, Sharp, Fast), which way W or stick-up pitches, and reduced motion.
+- **Settings** live in the pause menu (Esc) and are kept in `localStorage` (`aw:settings:v1`, `src/app/settings.ts`): graphics (Auto, Sharp, Fast), time of day, sound, which way W or stick-up pitches, and reduced motion.
 - **Two kinds of quality.** The tier (`high` or `low`) decides what is loaded: the ground texture, and whether small buildings are built. It is picked once per visit from `?quality=`, else a pinned graphics setting, else the device (touch or four cores and under means low). Detail is adjusted while running, on a ladder in `src/shared/detail.ts`: first a shorter draw distance, then coarser 3D pixels. The HUD keeps its size throughout, because only the canvas changes scale.
 - **The governor** (`src/app/governor.ts`) drives that ladder when graphics is Auto. It steps down after about three seconds under 45 fps, tries stepping back up after twelve clean seconds, settles on the lower level if that brings the stutter back, and gives the detail back entirely if lowering it made frames no faster (a 30 Hz power-saving mode, say). `window.__aw.info().detail` shows the level.
 - **Reduced motion** (the device preference, or the setting): the title backdrop and the briefing camera hold still, the view does not roll with the bank, and "Fly me there" cuts to the stop instead of time-warping across the city.

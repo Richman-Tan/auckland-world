@@ -7,6 +7,18 @@ import { BufferAttribute, BufferGeometry, Sphere, Vector3 } from 'three';
 
 export type V3 = [number, number, number];
 
+/**
+ * What a face is, carried in the vertex colour's alpha for the landmark shader (render/materials.ts).
+ * By day the last two are shaded like any other face; at night they light up.
+ */
+export const ALPHA_NORMAL = 255;
+/** The blinking red aircraft light. */
+export const ALPHA_BLINK = 128;
+/** A band of windows: warm glow at night. */
+export const ALPHA_WINDOW = 176;
+/** A floodlit face: shown in its own light at night. */
+export const ALPHA_FLOOD = 208;
+
 export function hexRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -48,7 +60,8 @@ export class MeshBuilder {
   }
 
   /** Vertical (optionally tapered) prism around the y axis with `sides` sides; side colours may alternate. */
-  frustum(cx: number, cz: number, y0: number, y1: number, r0: number, r1: number, sides: number, color: string, opts: { capTop?: boolean; capBottom?: boolean; color2?: string } = {}) {
+  frustum(cx: number, cz: number, y0: number, y1: number, r0: number, r1: number, sides: number, color: string, opts: { capTop?: boolean; capBottom?: boolean; color2?: string; alpha?: number } = {}) {
+    const alpha = opts.alpha ?? ALPHA_NORMAL;
     const ym = (y0 + y1) / 2;
     const ref: V3 = [cx, ym, cz];
     for (let i = 0; i < sides; i++) {
@@ -59,9 +72,9 @@ export class MeshBuilder {
       const t0: V3 = [cx + Math.cos(a0) * r1, y1, cz + Math.sin(a0) * r1];
       const t1: V3 = [cx + Math.cos(a1) * r1, y1, cz + Math.sin(a1) * r1];
       const c = opts.color2 && i % 2 === 1 ? opts.color2 : color;
-      this.quad(b0, b1, t1, t0, ref, c);
-      if (opts.capTop) this.tri(t0, t1, [cx, y1, cz], ref, color);
-      if (opts.capBottom) this.tri(b0, b1, [cx, y0, cz], ref, color);
+      this.quad(b0, b1, t1, t0, ref, c, alpha);
+      if (opts.capTop) this.tri(t0, t1, [cx, y1, cz], ref, color, alpha);
+      if (opts.capBottom) this.tri(b0, b1, [cx, y0, cz], ref, color, alpha);
     }
   }
 
