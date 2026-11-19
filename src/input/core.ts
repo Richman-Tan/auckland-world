@@ -23,6 +23,8 @@ export interface KeyLike {
   editable?: boolean;
   /** True while an IME composition is in progress. */
   composing?: boolean;
+  /** True when the event target is a button, link or other control the browser activates with Enter or Space. */
+  interactive?: boolean;
 }
 
 const LEFT = ['KeyA', 'ArrowLeft'];
@@ -42,14 +44,20 @@ const ACTION_KEYS: Record<string, InputAction> = {
   KeyE: 'interact',
   KeyH: 'help',
 };
+/**
+ * Tab is deliberately absent: in a dialog it belongs to the browser, so focus can move between the
+ * buttons. M still toggles the destinations map.
+ */
 const DIALOG_KEYS: Record<string, InputAction> = {
   // E: land from a briefing at a stop with a room, or close a room's page and keep walking.
   KeyE: 'interact',
-  Tab: 'nav',
+  KeyM: 'nav',
   Escape: 'back',
   Enter: 'engage',
   NumpadEnter: 'engage',
 };
+
+const ACTIVATE_KEYS = new Set(['Enter', 'NumpadEnter', 'Space']);
 
 const DRAG_DEADZONE_PX = 6;
 const DRAG_FULL_PX = 110;
@@ -148,6 +156,9 @@ export function createInputCore(): InputCore {
         return code === 'Tab' || code === 'Space';
       }
       // dialog
+      // Enter or Space on a focused button or link activates that control and nothing else; without
+      // this, Enter on "Controls help" would also resume the game.
+      if (e.interactive && ACTIVATE_KEYS.has(code)) return false;
       if (!e.repeat) {
         if (LEFT.includes(code)) emit('prev');
         else if (RIGHT.includes(code)) emit('next');
@@ -155,7 +166,7 @@ export function createInputCore(): InputCore {
           const a = DIALOG_KEYS[code] ?? (digitOf(code) ? (`select${digitOf(code)}` as InputAction) : undefined);
           if (!a) return false;
           emit(a);
-          return code === 'Tab';
+          return false;
         }
         return true;
       }

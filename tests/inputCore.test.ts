@@ -65,7 +65,7 @@ describe('input core', () => {
     expect(seen).toEqual(['engage']);
   });
 
-  it('dialog mode: arrows and A/D page, no steering, Esc/Tab/Enter/digits still emit', () => {
+  it('dialog mode: arrows and A/D page, no steering, Esc/M/Enter/digits still emit', () => {
     const { core, seen, press } = setup();
     core.setMode('dialog');
     press('ArrowLeft');
@@ -76,7 +76,7 @@ describe('input core', () => {
     expect(core.controls()).toEqual({ turn: 0, pitch: 0, boost: false });
     expect(core.hasFlightInput()).toBe(false);
     press('Escape');
-    press('Tab');
+    press('KeyM');
     press('Enter');
     press('Digit2');
     expect(seen.slice(4)).toEqual(['back', 'nav', 'engage', 'select2']);
@@ -85,6 +85,35 @@ describe('input core', () => {
     expect(seen.length).toBe(8);
     press('KeyE');
     expect(seen.slice(8)).toEqual(['interact']);
+  });
+
+  it('dialog mode: Tab is left to the browser so focus can move between buttons', () => {
+    const { core, seen, press } = setup();
+    core.setMode('dialog');
+    expect(press('Tab')).toBe(false);
+    expect(press('Tab', { repeat: true })).toBe(false);
+    expect(seen).toEqual([]);
+  });
+
+  it('dialog mode: Enter or Space on a focused button or link only activates that control', () => {
+    const { core, seen, press } = setup();
+    core.setMode('dialog');
+    expect(press('Enter', { interactive: true })).toBe(false);
+    expect(press('NumpadEnter', { interactive: true })).toBe(false);
+    expect(press('Space', { interactive: true })).toBe(false);
+    expect(seen).toEqual([]);
+    // Other keys still work with a button focused: Esc closes, arrows page, digits pick.
+    press('Escape', { interactive: true });
+    press('ArrowRight', { interactive: true });
+    press('Digit3', { interactive: true });
+    expect(seen).toEqual(['back', 'next', 'select3']);
+  });
+
+  it('flight mode: a focused HUD button does not swallow Enter or Space', () => {
+    const { seen, press } = setup();
+    press('Enter', { interactive: true });
+    press('Space', { interactive: true });
+    expect(seen).toEqual(['engage', 'briefing']);
   });
 
   it('chat mode: only Esc emits, even from a text field; everything else reaches the page', () => {

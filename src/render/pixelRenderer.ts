@@ -14,12 +14,17 @@ export class PixelRenderer {
   width = 1;
   height = 1;
   contextLost = false;
+  /** Told when the browser takes the WebGL context away (true) and when it hands it back (false). */
+  onContextChange: ((lost: boolean) => void) | null = null;
   private onLost = (e: Event) => {
+    // Without preventDefault the browser never restores the context.
     e.preventDefault();
     this.contextLost = true;
+    this.onContextChange?.(true);
   };
   private onRestored = () => {
     this.contextLost = false;
+    this.onContextChange?.(false);
   };
 
   constructor(readonly canvas: HTMLCanvasElement) {

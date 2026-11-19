@@ -9,9 +9,10 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 ```sh
 nvm use            # Node 22
 npm install
-npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to start at a stop, ?debug for window.__aw)
+npm run dev        # http://localhost:5173  (?map=fake for the synthetic world, ?stop=projects to start at a stop, ?quality=low|high, ?debug for window.__aw)
+npm run typecheck  # src, scripts, api and the dev harnesses
 npm test
-npm run build
+npm run build      # typecheck, then vite build (this is what Vercel runs)
 npm run check:bundle  # after a build: the title page and /page/ load no three.js up front, and stay in budget
 ```
 
@@ -22,7 +23,9 @@ npm run map:fake   # synthetic world in public/map-fake (no network)
 npm run map        # fetch (cached in data/), build public/map, check
 ```
 
-See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data licences.
+See `docs/PLAN.md` for the original design and milestones (a record; this README describes the code as it is), and `ATTRIBUTION.md` for data licences.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a build and the bundle check on every push to `master` and every pull request.
 
 ## Layout
 
@@ -36,7 +39,13 @@ See `docs/PLAN.md` for the design and milestones, and `ATTRIBUTION.md` for data 
 - `src/content/` everything the site says (one source for the 3D view and `/page/`)
 - `src/shared/` binary map formats, collision, palette (shared by the pipeline and the runtime)
 - `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
-- `dev/*.html` dev-only harnesses for the world, flight and UI
+- `dev/*.html` dev-only harnesses for the world, flight, UI and the social card (`dev/og.html`)
+
+## Keyboard
+
+While flying, the input layer owns the keys (`src/input/core.ts`): WASD or arrows steer, Tab or M opens the destinations map, Space reads, E lands, Esc pauses. In any dialog (title, map, briefing, pause) Tab belongs to the browser so focus can move between the buttons, M still toggles the map, and Enter or Space on a focused button only activates that button.
+
+If the browser drops the WebGL context, a notice shows while it recovers; if it does not come back within five seconds the error screen offers a reload and the plain page. `window.__aw.loseContext()` and `restoreContext()` simulate it.
 
 ## Bridge chat
 

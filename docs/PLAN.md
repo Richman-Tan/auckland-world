@@ -1,5 +1,7 @@
 # Plan: "Fly over Auckland" portfolio (inspired by dvlan.dev)
 
+> **Status (November 2026).** This is the original build plan, kept as a record. Phase 1 (M0 to M6) and Phase 2's Sky Deck room, Claude chat and Vercel config are built. Where this document and the code disagree, the code wins: the current layout, scripts and behaviour are described in `README.md`. Never built from this plan: music, and `osmtogeojson` / `lerc` (neither was needed).
+
 ## Context
 
 **What dvlan.dev is.** "Dylan's World" is Dylan Nguyen's personal portfolio, built as a game. I read its source to see how it works:

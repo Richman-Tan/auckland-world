@@ -246,6 +246,12 @@
 .aw-toasts { position: absolute; top: calc(var(--safe-t) + 70px); right: calc(var(--safe-r) + 12px); display: flex; flex-direction: column; gap: calc(var(--u) * 2); align-items: flex-end; pointer-events: none; max-width: min(340px, calc(100vw - 24px)); }
 .aw-toast { background: var(--panel); border: var(--u) solid var(--harbour); padding: calc(var(--u) * 1.5) calc(var(--u) * 3); animation: aw-in .2s steps(3); }
 .aw-toast[data-kind='warn'] { border-color: var(--pohutukawa); }
+/* A message that outlives a toast and shows over every view, e.g. while the 3D view recovers. */
+.aw-notice {
+  position: absolute; top: calc(var(--safe-t) + 12px); left: 50%; transform: translateX(-50%); z-index: 40;
+  max-width: min(420px, calc(100vw - 24px)); text-align: center;
+  background: var(--panel-solid); border: var(--u) solid var(--kowhai); padding: calc(var(--u) * 2) calc(var(--u) * 4);
+}
 @keyframes aw-in { from { transform: translateX(24px); opacity: 0; } }
 
 .aw-attrib {

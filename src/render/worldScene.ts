@@ -230,6 +230,10 @@ export class WorldSceneImpl implements WorldScene {
     this.lastRender = t1;
   }
 
+  onContextChange(cb: (lost: boolean) => void): void {
+    this.px.onContextChange = cb;
+  }
+
   resize(cssWidth: number, cssHeight: number): { width: number; height: number } {
     const r = this.px.resize(cssWidth, cssHeight);
     this.shared.uResY.value = r.height;

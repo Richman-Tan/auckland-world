@@ -11,6 +11,16 @@ function isEditable(t: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
 }
 
+/** Controls the browser activates itself on Enter or Space. */
+function isInteractive(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || typeof el.tagName !== 'string') return false;
+  const tag = el.tagName;
+  if (tag === 'BUTTON' || tag === 'SUMMARY') return true;
+  if (tag === 'A') return el.hasAttribute('href');
+  return el.getAttribute?.('role') === 'button';
+}
+
 const toKey = (e: KeyboardEvent): KeyLike => ({
   code: e.code,
   repeat: e.repeat,
@@ -19,6 +29,7 @@ const toKey = (e: KeyboardEvent): KeyLike => ({
   altKey: e.altKey,
   editable: isEditable(e.target),
   composing: e.isComposing,
+  interactive: isInteractive(e.target),
 });
 
 /**

@@ -24,7 +24,8 @@ export type AppState =
   /** Walking around a stop's room; panel is the briefing page open over it, if any. The plane waits outside. */
   | { kind: 'room'; stop: StopId; panel: number | null; pageCount: number }
   | { kind: 'paused'; reason: 'menu' | 'hidden'; resumeTo: ActiveState }
-  | { kind: 'error'; reason: 'webgl' | 'load'; message?: string };
+  /** webgl: no 3D support. load: the map failed to load. context: the browser dropped the 3D view and never gave it back. */
+  | { kind: 'error'; reason: 'webgl' | 'load' | 'context'; message?: string };
 
 export type ActiveState = Extract<AppState, { kind: 'flying' | 'nav' | 'autopilot' | 'briefing' | 'chat' | 'room' }>;
 
@@ -34,6 +35,8 @@ export type AppEvent =
   | { type: 'LOADED' }
   | { type: 'LOAD_FAILED'; message?: string }
   | { type: 'NO_WEBGL' }
+  /** The WebGL context was lost and did not come back. */
+  | { type: 'CONTEXT_LOST' }
   | { type: 'OPEN_NAV' }
   | { type: 'CLOSE_NAV' }
   | { type: 'NAV_SELECT'; stop: StopId }
@@ -88,6 +91,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
   // Errors are terminal; the error screen offers the read-as-page link instead.
   if (state.kind === 'error') return state;
   if (event.type === 'NO_WEBGL') return { kind: 'error', reason: 'webgl' };
+  if (event.type === 'CONTEXT_LOST') return { kind: 'error', reason: 'context' };
 
   if (event.type === 'PAUSE') {
     if (!isActive(state)) return state;
@@ -135,7 +139,7 @@ export function transition(state: AppState, event: AppEvent, ctx: FsmContext): A
         case 'GO_TO_STOP':
           return { kind: 'autopilot', target: event.stop, phase: 'climb' };
         case 'CLOSE_NAV':
-        case 'OPEN_NAV': // Tab toggles
+        case 'OPEN_NAV': // M toggles
         case 'BACK':
           return { kind: 'flying' };
         default:

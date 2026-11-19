@@ -37,7 +37,9 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   const error = createErrorView();
   const attrib = h('a', { class: 'aw-attrib', href: '/page/#credits', text: '© OpenStreetMap · LINZ', 'aria-label': 'Map credits: OpenStreetMap and LINZ' });
 
-  root.replaceChildren(title.el, loading.el, hud.el, warp.el, room.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib, room.fade);
+  const notice = h('p', { class: 'aw-notice', role: 'status', hidden: true });
+
+  root.replaceChildren(title.el, loading.el, hud.el, warp.el, room.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib, notice, room.fade);
 
   const roomOf = (id: StopId) =>
     content.stops.find((s) => s.id === id)?.experiences.find((x) => x.kind === 'room' && x.status === 'live') as
@@ -59,11 +61,12 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
   syncPixelScale();
   window.addEventListener('resize', syncPixelScale);
 
-  function focusOnce(key: string, el: HTMLElement): void {
+  function focusOnce(key: string, el: HTMLElement | (() => HTMLElement)): void {
     if (key === focusKey) return;
     focusKey = key;
-    // Wait a frame so the element is laid out after being unhidden.
-    requestAnimationFrame(() => el.focus({ preventScroll: true }));
+    // Wait a frame so the element is laid out after being unhidden. A getter is resolved then too:
+    // a digit key opens the map and picks a stop in the same tick, and focus should land on that stop.
+    requestAnimationFrame(() => (typeof el === 'function' ? el() : el).focus({ preventScroll: true }));
   }
 
   function sync(next: AppState): void {
@@ -88,6 +91,10 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     setHidden(chat.el, view.kind !== 'chat');
     setHidden(pause.el, !menu);
     setHidden(attrib, view.kind === 'title' || view.kind === 'loading' || view.kind === 'error');
+    // The pause menu and the destinations map are modal: what stays visible underneath (HUD prompt,
+    // an open briefing or chat, the room's Leave button) must not take focus while Tab moves around.
+    for (const under of [hud.el, warp.el, room.el, briefing.el, chat.el]) under.inert = menu;
+    attrib.inert = menu || view.kind === 'nav';
 
     const hudOn = view.kind === 'flying' || view.kind === 'autopilot' || view.kind === 'briefing' || view.kind === 'chat';
     hud.setActive(hudOn);
@@ -126,7 +133,7 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     // Move focus into whatever dialog just opened.
     if (menu) focusOnce('pause', pause.focusTarget);
     else if (view.kind === 'title') focusOnce('title', title.focusTarget);
-    else if (view.kind === 'nav') focusOnce('nav', nav.focusTarget());
+    else if (view.kind === 'nav') focusOnce('nav', () => nav.focusTarget());
     else if (view.kind === 'briefing') focusOnce(`briefing:${view.stop}`, briefing.focusTarget);
     else if (view.kind === 'room' && view.panel !== null) focusOnce(`room-panel:${view.stop}`, briefing.focusTarget);
     else if (view.kind === 'chat') focusOnce(`chat:${view.stop}`, chat.focusTarget());
@@ -160,6 +167,10 @@ export const createUi: CreateUi = ({ root, content, dispatch }): UiApi => {
     },
     toast(text, kind) {
       hud.toast(text, kind);
+    },
+    setNotice(text) {
+      notice.textContent = text ?? '';
+      setHidden(notice, !text);
     },
     setPrompt(p: PromptInfo | null) {
       hud.setPrompt(p);

@@ -35,6 +35,8 @@ import { placeStops, spawnPoint } from './placement';
 
 const STEP = 1 / 60;
 const MAX_STEPS_PER_FRAME = 60;
+/** How long to wait for a lost WebGL context to come back before showing the error screen. */
+const CONTEXT_RESTORE_MS = 5000;
 const STOP_IDS: StopId[] = content.stops.map((s) => s.id);
 
 type FlightModule = typeof import('../flight/index');
@@ -390,6 +392,22 @@ export function startApp(): void {
     };
     addEventListener('resize', resize);
     resize();
+    // The browser can take the WebGL context away (GPU reset, memory pressure, a long sleep) and
+    // usually hands it back within a second or two; three.js then rebuilds its own state.
+    let contextTimer = 0;
+    world.onContextChange((lost) => {
+      clearTimeout(contextTimer);
+      if (lost) {
+        ui.setNotice('The 3D view was interrupted. Restoring it now.');
+        contextTimer = window.setTimeout(() => {
+          ui.setNotice(null);
+          dispatch({ type: 'CONTEXT_LOST' });
+        }, CONTEXT_RESTORE_MS);
+      } else {
+        ui.setNotice(null);
+        resize();
+      }
+    });
     return { world, flight, sim, camera, plane, proximity: flight.createProximity(stops), stops, hold: flight.createHoldView(), deck };
   }
 
@@ -654,9 +672,21 @@ export function startApp(): void {
   /* ------------------------------------------------------------------ debug */
 
   if (debug) {
+    // getExtension returns null once the context is lost, so keep the handle from before.
+    let loseExt: WEBGL_lose_context | null = null;
     (window as unknown as { __aw: unknown }).__aw = {
       state: () => state,
       dispatch,
+      /** Simulate the browser dropping the WebGL context; restoreContext() hands it back. */
+      loseContext: () => {
+        loseExt = loaded?.world.renderer.getContext().getExtension('WEBGL_lose_context') ?? loseExt;
+        loseExt?.loseContext();
+        return !!loseExt;
+      },
+      restoreContext: () => {
+        loseExt?.restoreContext();
+        return !!loseExt;
+      },
       info: () => {
         const l = loaded;
         if (!l) return { loaded: false };

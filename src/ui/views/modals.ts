@@ -57,11 +57,15 @@ export function createErrorView() {
   return {
     el,
     focusTarget: page,
-    set(reason: 'webgl' | 'load', message?: string) {
+    set(reason: 'webgl' | 'load' | 'context', message?: string) {
       if (reason === 'webgl') {
         setText(heading, "Your browser can't show the 3D view");
         setText(msg, 'The flight needs WebGL, which this browser or device has turned off. Everything is on the plain page instead.');
         reload.hidden = true;
+      } else if (reason === 'context') {
+        setText(heading, 'The 3D view stopped');
+        setText(msg, 'Your browser shut the 3D view down, which can happen when the device runs short of graphics memory. You can try again, or read everything as a plain page.');
+        reload.hidden = false;
       } else {
         setText(heading, "Couldn't load Auckland");
         setText(msg, 'The map did not finish loading. You can try again, or read everything as a plain page.');

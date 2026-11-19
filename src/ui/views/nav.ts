@@ -93,6 +93,13 @@ export function createNavView(content: SiteContent, dispatch: (e: AppEvent) => v
       selected = id;
       for (const [sid, b] of buttons) b.setAttribute('aria-pressed', String(sid === id));
       fly.setAttribute('aria-disabled', String(id === null));
+      // Picking with 1 to 5 or the arrows moves focus with the selection, so Enter then flies to the
+      // stop that is highlighted instead of re-picking whichever button had focus.
+      const target = id ? buttons.get(id) : undefined;
+      const focused = document.activeElement;
+      if (visible && target && focused !== target && focused instanceof HTMLElement && list.contains(focused)) {
+        target.focus({ preventScroll: true });
+      }
       redraw();
     },
     setWorld(w: UiWorld, image: HTMLImageElement | null) {

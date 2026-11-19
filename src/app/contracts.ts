@@ -217,6 +217,8 @@ export interface WorldScene {
   render(camera: Camera): void;
   /** Call on window resize; returns the internal (low-res) size. */
   resize(cssWidth: number, cssHeight: number): { width: number; height: number };
+  /** The browser took the WebGL context away (true) or gave it back (false). Rendering pauses in between. */
+  onContextChange(cb: (lost: boolean) => void): void;
   stats(): WorldStats;
   dispose(): void;
 }
@@ -287,6 +289,8 @@ export interface UiApi {
   /** Throttle internally; called every frame. */
   updateTelemetry(t: Telemetry): void;
   toast(text: string, kind?: 'info' | 'warn'): void;
+  /** A message that stays up in every view until cleared with null (e.g. while the 3D view recovers). */
+  setNotice(text: string | null): void;
   setPrompt(p: PromptInfo | null): void;
   /** What the walker in a room is facing, for the "use" prompt (null hides it). */
   setRoomSpot(s: { id: string; action: string } | null): void;

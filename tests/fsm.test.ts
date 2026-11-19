@@ -64,6 +64,18 @@ describe('fsm', () => {
     expect(run(s, { type: 'BACK' })).toEqual({ kind: 'flying' });
   });
 
+  it('a WebGL context that never comes back ends on the error screen from any state', () => {
+    const from: AppState[] = [
+      { kind: 'title' },
+      { kind: 'flying' },
+      { kind: 'briefing', stop: 'projects', page: 1, pageCount: 4 },
+      { kind: 'room', stop: 'projects', panel: null, pageCount: 4 },
+      { kind: 'paused', reason: 'menu', resumeTo: { kind: 'flying' } },
+    ];
+    for (const s of from) expect(run(s, { type: 'CONTEXT_LOST' })).toEqual({ kind: 'error', reason: 'context' });
+    expect(run({ kind: 'error', reason: 'webgl' }, { type: 'CONTEXT_LOST' })).toEqual({ kind: 'error', reason: 'webgl' });
+  });
+
   it('errors are terminal', () => {
     const s = run({ kind: 'title' }, { type: 'NO_WEBGL' }, { type: 'FLY' });
     expect(s).toEqual({ kind: 'error', reason: 'webgl' });

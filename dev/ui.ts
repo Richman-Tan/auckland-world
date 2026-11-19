@@ -2,13 +2,14 @@
  * UI harness: createUi over a plain background, with the fake map's minimap, real placeStops,
  * a local AppState driven by the real transition(), and an animated plane circling the CBD.
  * ?s=<view> jumps straight to a view (title, loading, flying, nav, autopilot, briefing, briefing-last,
- * pause, error-webgl, error-load); ?panel=0 hides the floating panel.
+ * chat, room, pause, error-webgl, error-load); ?panel=0 hides the floating panel.
  */
 import { placeStops } from '../src/app/placement';
-import { transition, type AppEvent, type AppState } from '../src/app/fsm';
+import { transition, type AppEvent, type AppState, type FsmContext } from '../src/app/fsm';
 import type { Telemetry, UiApi, UiWorld } from '../src/app/contracts';
 import { content } from '../src/content/index';
-import { decodeTerrain, isGzip, isMapMeta, latLonToLocal, sampleTerrain, type MapMeta } from '../src/shared/mapFormat';
+import type { StopId } from '../src/content/types';
+import { decodeTerrain, isGzip, isMapMeta, sampleTerrain, type MapMeta } from '../src/shared/mapFormat';
 import { createUi } from '../src/ui/index';
 
 const root = document.getElementById('ui') as HTMLElement;
@@ -17,7 +18,13 @@ const q = new URLSearchParams(location.search);
 
 let state: AppState = { kind: 'title' };
 let ui: UiApi;
-const ctx = { pageCount: (id: string) => content.stops.find((s) => s.id === id)?.briefing.length ?? 1 };
+const live = (id: StopId, kind: 'chat' | 'room') =>
+  !!content.stops.find((s) => s.id === id)?.experiences.some((x) => x.kind === kind && x.status === 'live');
+const ctx: FsmContext = {
+  pageCount: (id) => content.stops.find((s) => s.id === id)?.briefing.length ?? 1,
+  hasChat: (id) => live(id, 'chat'),
+  hasRoom: (id) => live(id, 'room'),
+};
 
 function set(s: AppState): void {
   state = s;
@@ -119,9 +126,13 @@ function jump(name: string): void {
     case 'briefing': return set({ kind: 'briefing', stop: first.id, page: 0, pageCount: first.briefing.length });
     case 'briefing-last': return set({ kind: 'briefing', stop: first.id, page: first.briefing.length - 1, pageCount: first.briefing.length });
     case 'work': { const s = content.stops[1]; return set({ kind: 'briefing', stop: s.id, page: 0, pageCount: s.briefing.length }); }
+    case 'chat': return set({ kind: 'chat', stop: 'talk' });
+    case 'room': return set({ kind: 'room', stop: first.id, panel: null, pageCount: first.briefing.length });
     case 'pause': return set({ kind: 'paused', reason: 'menu', resumeTo: { kind: 'flying' } });
     case 'error-webgl': return set({ kind: 'error', reason: 'webgl' });
     case 'error-load': return set({ kind: 'error', reason: 'load', message: 'meta.json: 404' });
+    case 'error-context': return set({ kind: 'error', reason: 'context' });
+    case 'notice': return ui.setNotice('The 3D view was interrupted. Restoring it now.');
     case 'prompt':
       set({ kind: 'flying' });
       return ui.setPrompt({ stop: 'projects', label: 'PROJECTS', place: 'SKY TOWER', actions: [{ action: 'briefing', key: 'Space', label: 'Read briefing' }] });
@@ -130,7 +141,7 @@ function jump(name: string): void {
 }
 (window as unknown as Record<string, unknown>).__ui = { jump, dispatch, set };
 
-const names = ['title', 'loading', 'flying', 'prompt', 'nav', 'autopilot', 'briefing', 'briefing-last', 'work', 'pause', 'error-webgl', 'error-load', 'toast'];
+const names = ['title', 'loading', 'flying', 'prompt', 'nav', 'autopilot', 'briefing', 'briefing-last', 'work', 'chat', 'room', 'pause', 'error-webgl', 'error-load', 'error-context', 'notice', 'toast'];
 for (const n of names) {
   const b = document.createElement('button');
   b.textContent = n;
