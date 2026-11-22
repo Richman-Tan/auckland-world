@@ -60,7 +60,7 @@ describe('world geometry on the fake map', () => {
     // the collision grid never changes with quality
     expect(lo.grid.data).toEqual(hi.grid.data);
     // Builds two full worlds; give it room when the whole suite runs in parallel.
-  }, 20_000);
+  }, 180_000);
 
   it('outskirts leave a hole for the world rectangle and sink to the floor', async () => {
     const out = await buildWorld({

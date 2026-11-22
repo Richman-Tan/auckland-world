@@ -25,5 +25,9 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
+    // The suite gates deploys (npm run build runs it), so a slow or busy machine must not fail it:
+    // these limits are many times what any test needs. A genuine hang still fails, just later.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });

@@ -73,7 +73,7 @@ npm install
 npm run dev           # http://localhost:5173
 npm run typecheck     # src, scripts, api and the dev harnesses
 npm test              # about 300 tests, a few seconds
-npm run build         # typecheck, then vite build (this is what Vercel runs)
+npm run build         # typecheck, tests, then vite build (this is what Vercel runs)
 npm run check:bundle  # after a build: the title page and /page/ load no three.js up front, and stay in budget
 ```
 
@@ -88,7 +88,9 @@ npm run map        # fetch (cached in data/), build public/map, check
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck, the tests, a build and the bundle check on every push to `master` and every pull request. The tests are plain Vitest in Node: the flight model, the autopilot flown headless to every stop on the real map, the state machine, routing, the content rules, the chat server and the map pipeline. There are no browser tests; the dev harnesses in `dev/*.html` are for looking at things by hand.
 
-The Vercel project is connected to this repository: a push to `master` builds and deploys to production, and other branches and pull requests get preview deployments. `vercel --prod` from a clean checkout still works for a manual deploy.
+The Vercel project is connected to this repository: a push to `master` builds and deploys to production, and other branches and pull requests get preview deployments. Vercel builds with `npm run build`, so a type error or a failing test stops the deploy and the site stays on the last good build. `vercel --prod` from a clean checkout still works for a manual deploy.
+
+Node is pinned to 22 in three places that must agree: `.nvmrc` (local, and what CI reads), and `engines` in `package.json` (what Vercel reads).
 
 Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the chat stays scripted.
 
