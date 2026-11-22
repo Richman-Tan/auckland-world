@@ -162,7 +162,8 @@ export function structuredData(c: SiteContent, siteUrl: string): Record<string, 
     url: `${siteUrl}/`,
     description: p.tagline,
     jobTitle,
-    sameAs: p.links.map((l) => l.href).filter((h) => h.startsWith('https://')),
+    // Profiles elsewhere, not every link: the CV is a document, and email is left out on purpose.
+    sameAs: p.links.filter((l) => l.kind === 'social').map((l) => l.href),
   };
   if (employer) person.worksFor = { '@type': 'Organization', name: employer };
   if (locality) person.address = { '@type': 'PostalAddress', addressLocality: locality, ...(country ? { addressCountry: country } : {}) };

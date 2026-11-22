@@ -10,11 +10,20 @@ export const EMAIL = 'richmantan0@gmail.com';
  */
 export const SITE_URL = 'https://richmantan.vercel.app';
 
+/**
+ * The public copy of the CV, served from public/. It is not the CV sent to employers: it is rebuilt
+ * from the same source by `npm run cv:web`, without the phone number, the status row or the
+ * Sandfield detail (scripts/lib/cvWeb.ts). Never copy a CV PDF into public/ by hand.
+ */
+export const CV_FILE = 'Richman-Tan-CV.pdf';
+export const CV_URL = `${SITE_URL}/${CV_FILE}`;
+
 export const GITHUB = 'https://github.com/Richman-Tan';
 export const LINKEDIN = 'https://www.linkedin.com/in/richman-tan/';
 
 export const contactLinks: Link[] = [
   { label: 'Email', href: `mailto:${EMAIL}`, kind: 'email', primary: true },
+  { label: 'CV', href: CV_URL, kind: 'cv' },
   { label: 'GitHub', href: GITHUB, kind: 'social' },
   { label: 'LinkedIn', href: LINKEDIN, kind: 'social' },
 ];

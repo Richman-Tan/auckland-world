@@ -75,6 +75,7 @@ npm run typecheck     # src, scripts, api and the dev harnesses
 npm test              # about 300 tests, a few seconds
 npm run build         # typecheck, tests, then vite build (this is what Vercel runs)
 npm run check:bundle  # after a build: the title page and /page/ load no three.js up front, and stay in budget
+npm run cv:web -- ~/Documents/cv/cv.tex   # rebuild the public copy of the CV (needs LaTeX)
 ```
 
 `npm run dev` has no chat API, so the chat is scripted locally. The built map is committed in `public/map/`, so nothing needs fetching to run the site. To rebuild it:
@@ -108,9 +109,9 @@ Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the ch
 - `src/room/` the Sky Deck: layout and hotspots, walking, and the runtime (screens, signs, first-person camera); the room's mesh is `src/world/landmarks/skyDeck.ts`
 - `src/chat/` bridge chat: scripted matching, the AI backend (`remote.ts`), the `/api/chat` handler and its system prompt
 - `api/chat.ts` Vercel Node.js function for the AI chat; `api/_site.ts` is its generated prompt (`npm run chat:site`)
-- `src/content/` everything the site says (one source for the 3D view, `/page/` and the chat prompt)
+- `src/content/` everything the site says (one source for the 3D view, `/page/` and the chat prompt), and `rules.ts`, what it never says
 - `src/shared/` binary map formats, collision, palette, time of day, detail ladder and ambient paths (pure; shared by the pipeline, the runtime and the tests)
-- `scripts/` map pipeline (fetch, build, check) and the synthetic map generator
+- `scripts/` map pipeline (fetch, build, check), the synthetic map generator, and the public CV build (`scripts/cv/`)
 - `dev/*.html` dev-only harnesses for the world, flight, UI and the social card (`dev/og.html`)
 
 ### Tour, progress and links
@@ -146,6 +147,16 @@ The flight is a canvas, so what a crawler or a script-less browser needs is put 
 - `public/sitemap.xml` lists the two pages and `public/robots.txt` points at it and keeps crawlers off `/api/`.
 
 The site's address is `SITE_URL` in `src/content/links.ts`; a test checks that the canonical links, the sitemap and `robots.txt` all agree with it.
+
+### The CV
+
+The "CV" link serves `public/Richman-Tan-CV.pdf`. It is not the CV sent to employers. `npm run cv:web -- <cv.tex>` rebuilds it from that CV's LaTeX source in a temporary directory, with three things taken out (`scripts/lib/cvWeb.ts`):
+
+- the phone number;
+- the status row under the contact line (citizenship, work rights, relocation, availability);
+- the Sandfield bullets, which are replaced by the wording on the site's own Sandfield page, because the site names no figures, products or internal projects there (`src/content/rules.ts`).
+
+The script then reads the finished PDF back and refuses to publish it if any of those is still in it, or if it runs past one page. `tests/cv.test.ts` makes the same checks on the committed file, so a CV copied into `public/` by hand fails the build.
 
 ### Keyboard focus and recovery
 

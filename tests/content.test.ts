@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { content } from '../src/content/index';
+import { SANDFIELD_DENY } from '../src/content/rules';
 import type { Block } from '../src/content/types';
 
 /** Every string in the content, including nested blocks, links and chat. */
@@ -56,9 +57,8 @@ describe('study facts', () => {
 });
 
 describe('Sandfield', () => {
-  const deny = ['CallerChecker', 'Caller Verification', 'SecurityDashboard', 'security vulnerability dashboard', 'SAL.', 'Mainstreet', '200+ engineers', '1,000+ security alerts'];
   it('keeps internal names out of every string', () => {
-    for (const d of deny) expect(blob).not.toContain(d);
+    for (const d of SANDFIELD_DENY) expect(blob).not.toContain(d);
   });
   it('has no digits-heavy metrics in the Sandfield page', () => {
     const p = content.stops.find((s) => s.id === 'work')!.briefing.find((x) => x.id === 'sandfield')!;
