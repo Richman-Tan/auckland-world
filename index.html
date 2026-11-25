@@ -26,11 +26,18 @@
     <meta name="twitter:description" content="Fly a little plane over real Auckland to find my projects, work and study. Or read it all as a plain page." />
     <meta name="twitter:image" content="https://richmantan.vercel.app/og.jpg" />
     <link rel="preload" href="/map/meta.json" as="fetch" crossorigin />
+    <!-- The title is in this page and is set in these two faces: fetch them alongside the stylesheet. -->
+    <link rel="preload" href="/fonts/Jersey10-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- Held back until the stylesheet has arrived (it makes .aw-ui visible again), so the title is never shown unstyled. -->
+    <style>.aw-ui { visibility: hidden; }</style>
+    <noscript><style>#ui, #scene { display: none; }</style></noscript>
+    <!--BOOT-->
     <!--JSONLD-->
   </head>
   <body>
     <canvas id="scene" tabindex="-1" aria-label="A 3D view of Auckland"></canvas>
-    <div id="ui"></div>
+    <div id="ui" class="aw-ui"><!--TITLE--></div>
     <noscript>
       <!--HOME-->
     </noscript>

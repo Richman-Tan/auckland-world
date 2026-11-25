@@ -53,14 +53,14 @@ export const loadWorld: LoadWorld = async (opts: LoadWorldOptions): Promise<Worl
   const totals = new Map<string, number>();
   for (const n of names) totals.set(n, meta.files[n]?.bytes ?? 0);
   const progress = new ProgressTracker(totals, opts.onProgress);
-  progress.report(names[0], 0, 'Fetching map');
+  progress.report(names[0], 0, 'Fetching the map');
 
   const [terrain, buildings, ground] = await Promise.all([
     fetchBytes(base + meta.terrain.file, (n) => progress.report(meta.terrain.file, n, 'Fetching terrain')),
     fetchBytes(base + meta.buildings.file, (n) => progress.report(meta.buildings.file, n, 'Fetching buildings')),
     loadGround(base + groundFile, (n) => progress.report(groundFile, n, 'Fetching ground')),
   ]);
-  for (const n of names) progress.done(n, 'Building the city');
+  progress.enter('build', 'Building the city');
 
   const built = await runWorker({
     type: 'build',
@@ -76,6 +76,7 @@ export const loadWorld: LoadWorld = async (opts: LoadWorldOptions): Promise<Worl
 
   const query = createWorldQuery(built.terrain, built.grid, landmarkColliders(meta), meta.bounds, meta.water.level);
   const world = new WorldSceneImpl({ canvas: opts.canvas, meta, query, quality: opts.quality, ground, built });
+  progress.enter('compile', 'Compiling shaders');
   await world.warmUp();
   return world;
 };

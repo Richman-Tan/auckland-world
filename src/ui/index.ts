@@ -8,9 +8,11 @@ import { onward } from '../app/progress';
 import { createScriptedBackend } from '../chat';
 import { createRemoteBackend } from '../chat/remote';
 import type { StopId } from '../content/types';
+import { createBootScene } from './boot/scene';
 import { h, readPixelScale, setHidden } from './dom';
 import { createHud } from './hud/hud';
 import { createWarp } from './hud/warp';
+import { loadStage } from './loadStage';
 import { loadImage } from './minimap';
 import './styles/ui.css';
 import { createBriefingView } from './views/briefing';
@@ -24,7 +26,10 @@ import { createTitleView } from './views/title';
 export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi => {
   root.classList.add('aw-ui');
 
-  const title = createTitleView(content, dispatch);
+  // The title screen is usually in the page already (prerendered); it has to be found before the
+  // root's children are replaced below.
+  const title = createTitleView(content, dispatch, root);
+  const boot = createBootScene();
   const loading = createLoadingView();
   const hud = createHud(dispatch, settings);
   const warp = createWarp();
@@ -40,7 +45,11 @@ export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi
 
   const notice = h('p', { class: 'aw-notice', role: 'status', hidden: true });
 
-  root.replaceChildren(title.el, loading.el, hud.el, warp.el, room.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib, notice, room.fade);
+  // The boot scene now paints what the root's own background stood in for; a link straight to a
+  // stop has its view (app.ts dispatches in this same task), so the title no longer needs hiding.
+  root.classList.add('aw-live');
+  document.documentElement.classList.remove('aw-deep');
+  root.replaceChildren(boot.el, title.el, loading.el, hud.el, warp.el, room.el, nav.el, briefing.el, chat.el, pause.el, error.el, attrib, notice, room.fade);
 
   const roomOf = (id: StopId) =>
     content.stops.find((s) => s.id === id)?.experiences.find((x) => x.kind === 'room' && x.status === 'live') as
@@ -172,6 +181,10 @@ export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi
     setLoading(p: LoadProgress) {
       loading.set(p);
       title.setProgress(p);
+      boot.setProgress(loadStage(p).fraction);
+    },
+    setLoadFailed() {
+      title.setFailed();
     },
     updateTelemetry(t: Telemetry) {
       latest = t;
@@ -227,9 +240,18 @@ export const createUi: CreateUi = ({ root, content, dispatch, settings }): UiApi
     setPageHref(href: string) {
       error.setPageHref(href);
     },
+    reveal() {
+      title.setReady();
+      root.classList.add('aw-revealing');
+      return boot.reveal().then(() => {
+        root.classList.remove('aw-revealing');
+        root.classList.add('aw-world-ready');
+      });
+    },
+    setClock(text: string | null) {
+      title.setClock(text);
+    },
     setWorld(world: UiWorld) {
-      // The live city now renders behind the title screen: fade the placeholder backdrop.
-      root.classList.add('aw-world-ready');
       hud.setWorld(world, null);
       nav.setWorld(world, null);
       if (latest) nav.setPlane(latest.plane);

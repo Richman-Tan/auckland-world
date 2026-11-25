@@ -213,6 +213,11 @@ export interface LoadProgress {
   loadedBytes: number;
   totalBytes: number;
   label: string;
+  /**
+   * Which part of the load this is: fetching the map files (the bytes above count these), building
+   * the city's geometry from them, then compiling its shaders. Absent means fetching.
+   */
+  stage?: 'fetch' | 'build' | 'compile';
 }
 
 /** src/world/index.ts: everything in the 3D scene except the plane and the camera. */
@@ -310,6 +315,8 @@ export interface UiApi {
   /** Show/hide title, loading, nav, briefing, warp, pause and error views for this state. */
   sync(state: AppState): void;
   setLoading(p: LoadProgress): void;
+  /** The world could not be loaded: the title's loader says so instead of sitting part-way for ever. */
+  setLoadFailed(): void;
   /** Throttle internally; called every frame. */
   updateTelemetry(t: Telemetry): void;
   toast(text: string, kind?: 'info' | 'warn'): void;
@@ -324,6 +331,13 @@ export interface UiApi {
   focusScene(): void;
   /** Called once the map has loaded: enables the minimap, radar and nav overlay. */
   setWorld(world: UiWorld): void;
+  /**
+   * The live city has been drawn at least once: let the boot scene give way to it. Resolves when
+   * the hand-over is finished. Until this is called the boot scene covers the 3D view.
+   */
+  reveal(): Promise<void>;
+  /** The line beside the place name on the title screen: the time in Auckland and the part of the day, or null. */
+  setClock(text: string | null): void;
   /** Which stops have been seen: ticks on the title and map, and the "next stop" button. */
   setProgress(p: ProgressView): void;
   /** Cut through black (a jump to another stop without flying there). */

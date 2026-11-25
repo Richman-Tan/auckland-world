@@ -151,9 +151,14 @@ ${linksHtml(p.links)}
  * schema.org description of the site and its author, for search engines. Only facts already on the
  * site: name, role, employer, city and the public profile links. Contact addresses are left out.
  */
+/** "Software Developer · Somewhere" without the somewhere. */
+export function jobTitle(title: string): string {
+  return title.split(' · ')[0];
+}
+
 export function structuredData(c: SiteContent, siteUrl: string): Record<string, unknown> {
   const p = c.profile;
-  const [jobTitle, employer] = p.title.split(' · ');
+  const employer = p.title.split(' · ')[1];
   const [locality, country] = p.location.split(', ');
   const person: Record<string, unknown> = {
     '@type': 'Person',
@@ -161,7 +166,7 @@ export function structuredData(c: SiteContent, siteUrl: string): Record<string, 
     name: p.name,
     url: `${siteUrl}/`,
     description: p.tagline,
-    jobTitle,
+    jobTitle: jobTitle(p.title),
     // Profiles elsewhere, not every link: the CV is a document, and email is left out on purpose.
     sameAs: p.links.filter((l) => l.kind === 'social').map((l) => l.href),
   };

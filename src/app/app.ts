@@ -6,7 +6,7 @@
 import { type Hotspot, SKY_DECK_SPOTS, hotspotPoint } from '../room/layout';
 import { detailLadder, lowDetailLevel } from '../shared/detail';
 import { applyPixelScale } from '../shared/pixelScale';
-import { chosenSolarHour, lookAtSolar } from '../shared/timeOfDay';
+import { aucklandSolarHour, aucklandTime, chosenSolarHour, dayPart, lookAtSolar } from '../shared/timeOfDay';
 import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
 import type { StopId } from '../content/types';
@@ -44,6 +44,8 @@ const STEP = 1 / 60;
 const MAX_STEPS_PER_FRAME = 60;
 /** How long to wait for a lost WebGL context to come back before showing the error screen. */
 const CONTEXT_RESTORE_MS = 5000;
+/** How long the title screen's camera takes to settle in once the city is shown. */
+const ATTRACT_SETTLE_S = 3.4;
 const STOP_IDS: StopId[] = content.stops.map((s) => s.id);
 
 type FlightModule = typeof import('../flight/index');
@@ -571,7 +573,16 @@ export function startApp(): void {
   /** Seconds until the look is next refreshed from the clock (it only moves on Auto). */
   let lookTimer = 0;
   /** Sky, light and water for the chosen time: ?time=, else the setting, else the real hour in Auckland. */
+  /** Beside the place name on the title screen: the real time in Auckland, when that is what lights the city. */
+  function applyClock() {
+    const live = settings.get().time === 'auto' && !params.get('time');
+    const now = new Date();
+    ui.setClock(live ? `${aucklandTime(now)} · ${dayPart(aucklandSolarHour(now))}` : null);
+  }
+  applyClock();
+
   function applyLook() {
+    applyClock();
     if (!loaded) return;
     const look = lookAtSolar(chosenSolarHour(settings.get().time, params.get('time'), new Date()));
     loaded.world.setLook(look);
@@ -655,6 +666,7 @@ export function startApp(): void {
       console.error(err);
       // The title screen stays usable; asking to fly then shows the error with the page link.
       failure = err instanceof Error ? err.message : String(err);
+      ui.setLoadFailed();
       if (state.kind === 'loading') dispatch({ type: 'LOAD_FAILED', message: failure });
     },
   );
@@ -681,6 +693,8 @@ export function startApp(): void {
   };
   const renderPose: FlightState = structuredClone(prevPose);
   let attractAngle = 0;
+  /** When the live city was first shown (frame clock, seconds); the title camera eases in from then. */
+  let revealedAt: number | null = null;
 
   function controlsFor(l: Loaded): Controls {
     if (state.kind === 'autopilot' && autopilot) return autopilot.update(l.sim.state, l.world.query);
@@ -854,10 +868,13 @@ export function startApp(): void {
       if (!reducedMotion()) attractAngle += dt * 0.03;
       const st = l.world.meta.landmarks.skyTower;
       const cam = l.camera.camera;
-      const radius = 1250;
+      // An establishing shot: start high and wide as the city appears, and settle in over a few seconds.
+      const sinceReveal = revealedAt === null ? 0 : time - revealedAt;
+      const settle = reducedMotion() ? 1 : 1 - Math.pow(1 - Math.min(1, sinceReveal / ATTRACT_SETTLE_S), 3);
+      const radius = 1250 + (1 - settle) * 520;
       const cx = st.x + Math.sin(attractAngle) * radius;
       const cz = st.z + Math.cos(attractAngle) * radius;
-      cam.position.set(cx, 290, cz);
+      cam.position.set(cx, 290 + (1 - settle) * 170, cz);
       const fx = (st.x - cx) / radius;
       const fz = (st.z - cz) / radius;
       // Camera right vector is (-fz, 0, fx); aim left of the tower to push it right on screen.
@@ -872,6 +889,12 @@ export function startApp(): void {
     l.plane.update(renderPose, time);
     l.world.update(dt, time, l.camera.camera);
     l.world.render(l.camera.camera);
+    if (revealedAt === null) {
+      // The city has now really been drawn (the first frame is the one that uploads everything):
+      // let the boot scene give way to it.
+      revealedAt = time;
+      void ui.reveal();
+    }
 
     // Telemetry
     placeTimer -= dt;

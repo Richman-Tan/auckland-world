@@ -12,10 +12,14 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
-/* The pixel renderer positions and sizes the canvas itself. */
+/* The pixel renderer sizes the canvas; it is centred from the start so that sizing it moves nothing. */
 #scene {
   display: block;
   outline: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 #ui,
 #touch {

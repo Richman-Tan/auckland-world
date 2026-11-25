@@ -6,6 +6,7 @@ export type ProgressFn = (p: LoadProgress) => void;
 
 export class ProgressTracker {
   private loaded = new Map<string, number>();
+  private stage: NonNullable<LoadProgress['stage']> = 'fetch';
   constructor(
     private totals: Map<string, number>,
     private cb?: ProgressFn,
@@ -20,7 +21,14 @@ export class ProgressTracker {
       t += v;
       l += this.loaded.get(k) ?? 0;
     }
-    this.cb?.({ loadedBytes: l, totalBytes: t, label });
+    this.cb?.({ loadedBytes: l, totalBytes: t, label, stage: this.stage });
+  }
+  /** Everything is fetched and the next step has begun; it reports no progress of its own. */
+  enter(stage: 'build' | 'compile', label: string) {
+    this.stage = stage;
+    for (const [name, total] of this.totals) this.loaded.set(name, total);
+    const first = this.totals.keys().next().value;
+    if (first !== undefined) this.report(first, this.totals.get(first) ?? 0, label);
   }
   done(name: string, label: string) {
     this.report(name, this.totals.get(name) ?? 0, label);

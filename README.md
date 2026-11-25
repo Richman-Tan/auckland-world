@@ -19,6 +19,7 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 - **Land.** At the Sky Tower you can walk around the Sky Deck, where screens play short clips of each project.
 - **Talk.** The stop on the Harbour Bridge is a chat: scripted answers for the suggested questions, Claude for anything you type, grounded only in the site's own content.
 - **Watch the city.** The light follows the real time of day in Auckland. At night the windows come on and the Sky Tower is floodlit. Ferries cross the harbour and traffic runs over the bridge.
+- **Wait well.** The title is on screen before any script runs, and while the map loads a blueprint of the skyline goes up with it.
 - **Or skip all of it.** [`/page/`](https://richmantan.vercel.app/page/) is the same content as one static page with no JavaScript, and it is where you land without WebGL.
 
 <table>
@@ -113,6 +114,19 @@ Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the ch
 - `src/shared/` binary map formats, collision, palette, time of day, detail ladder and ambient paths (pure; shared by the pipeline, the runtime and the tests)
 - `scripts/` map pipeline (fetch, build, check), the synthetic map generator, and the public CV build (`scripts/cv/`)
 - `dev/*.html` dev-only harnesses for the world, flight, UI and the social card (`dev/og.html`)
+
+### First paint, loading and the reveal
+
+The title screen is in `index.html` itself. The build prerenders it from the content (`titleHtml` in `src/ui/views/titleHtml.ts`, written in by `scripts/vite/pagePrerender.ts`), so the name, the pitch and every button are painted from the first response, with no script. When the script arrives it takes over those same elements (`src/ui/views/title.ts`) rather than drawing new ones, and the buttons, dim until then, light up in turn. "Read it as a page" is a plain link and works from the start.
+
+- **No jump.** The two typefaces are preloaded, and the display face waits rather than showing the name in a stand-in. A few lines in the head set the pixel scale before the first paint, by the same rule the renderer uses later (`src/shared/pixelScale.ts`; a test holds the two together).
+- **Loading.** Behind the title is the boot scene (`src/ui/boot/`): a blueprint of the skyline on a small 2D canvas that goes up as the map arrives, with the Sky Tower as the gauge. Its mast is finished when the load is. The loader beside it gives the stage in words, a percentage and the megabytes. The download reports real bytes and takes most of the bar; building the geometry and compiling the shaders report nothing of their own, so the bar holds at a mark for each instead of pretending to move (`src/ui/loadStage.ts`).
+- **The reveal.** Once the live city has really been drawn, the blueprint dissolves away from the Sky Tower outwards in an ordered dither, and the title camera eases in from high and wide. With reduced motion it is a cut, and the camera does not move.
+- **Never a gate.** Every button works while the map loads: flying early goes to the loading view over the same scene. A link straight to a stop skips the title from the first paint. If the map fails, the loader says so and points at the page version.
+
+<img src="docs/screenshots/loading.jpg" alt="The title screen while the map loads: a blueprint skyline rising on the right, the Sky Tower part built, and a loader reading Fetching the map 62%" width="720">
+
+Beside the place name the title shows the time in Auckland and the part of the day, because that is what the city is lit for; it hides when a fixed time of day is chosen.
 
 ### Tour, progress and links
 

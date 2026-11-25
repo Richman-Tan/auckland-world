@@ -1,6 +1,8 @@
 import type { LoadProgress } from '../../app/contracts';
 import { h, setText } from '../dom';
-import { loadingFraction, loadingText } from '../format';
+import { loadingText } from '../format';
+import { loadStage } from '../loadStage';
+import { LOADING_FACT } from './titleHtml';
 
 export function createLoadingView() {
   const fill = h('div', { class: 'aw-loading__fill' });
@@ -18,12 +20,14 @@ export function createLoadingView() {
     bar,
     mb,
     label,
-    h('p', { class: 'aw-loading__hint', text: 'About 30,000 real buildings from OpenStreetMap' }),
+    h('p', { class: 'aw-loading__hint', text: LOADING_FACT }),
   );
   return {
     el,
     set(p: LoadProgress) {
-      const f = loadingFraction(p.loadedBytes, p.totalBytes);
+      // The same figure and words as the title screen's loader.
+      const stage = loadStage(p);
+      const f = p.totalBytes > 0 ? stage.fraction : null;
       bar.dataset.indeterminate = String(f === null);
       if (f === null) bar.removeAttribute('aria-valuenow');
       else {
@@ -32,7 +36,7 @@ export function createLoadingView() {
         if (fill.style.width !== w) fill.style.width = w;
       }
       setText(mb, loadingText(p.loadedBytes, p.totalBytes));
-      setText(label, p.label);
+      setText(label, stage.label);
     },
   };
 }

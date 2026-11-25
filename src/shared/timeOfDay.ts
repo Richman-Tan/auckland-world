@@ -306,6 +306,22 @@ export function solarHour(hour: number, sunrise: number, sunset: number): number
   return (18 + (12 * sinceSunset) / night) % 24;
 }
 
+/** The part of the day a solar hour falls in, as the title screen names it. */
+export function dayPart(solar: number): 'Dawn' | 'Morning' | 'Afternoon' | 'Dusk' | 'Night' {
+  const h = ((solar % 24) + 24) % 24;
+  if (h >= 5 && h < 7) return 'Dawn';
+  if (h >= 7 && h < 12) return 'Morning';
+  if (h >= 12 && h < 17) return 'Afternoon';
+  if (h >= 17 && h < 19.5) return 'Dusk';
+  return 'Night';
+}
+
+const WALL_CLOCK = new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', hour12: true });
+/** The time on the wall in Auckland: "9:41 am". */
+export function aucklandTime(date: Date): string {
+  return WALL_CLOCK.format(date).replace(/\u202f|\u00a0/g, ' ').toLowerCase();
+}
+
 /** The solar hour in Auckland right now (or at `date`). */
 export function aucklandSolarHour(date: Date): number {
   const c = aucklandClock(date);

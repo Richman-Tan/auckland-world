@@ -87,15 +87,6 @@
   padding: calc(var(--safe-t) + 32px) calc(var(--safe-r) + 6vw) calc(var(--safe-b) + 24px) calc(var(--safe-l) + 6vw);
   isolation: isolate;
 }
-/* Placeholder until the map is ready: Auckland dusk, matching the 3D sky so the hand-over is soft. */
-.aw-title__backdrop {
-  position: fixed; inset: 0; z-index: -2; pointer-events: none;
-  background:
-    linear-gradient(180deg, transparent 0 74%, #1f6f78 74% 100%),
-    linear-gradient(180deg, #2f6a7d 0%, #5f9aa0 38%, #e9cfae 72%, #f2d6b3 74%);
-  transition: opacity 1.6s ease;
-}
-.aw-world-ready .aw-title__backdrop { opacity: 0; }
 /* Legibility over the live city: dark on the left where the card sits, clear on the right. */
 .aw-title__scrim {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -152,15 +143,10 @@
 .aw-title__hint { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
 .aw-title__credit { color: var(--dim); font-family: var(--sans); font-size: 11px; -webkit-font-smoothing: antialiased; }
 .aw-title__credit a { color: var(--cream); }
-.aw-title__progress { display: flex; align-items: center; gap: calc(var(--u) * 2); color: var(--cream); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; flex-basis: 100%; transition: opacity 0.6s ease; }
-.aw-title__bar { width: 160px; height: calc(var(--u) * 2); border: var(--u) solid var(--cream); padding: 1px; }
-.aw-title__barfill { display: block; height: 100%; width: 0; background: var(--kowhai); }
-.aw-world-ready .aw-title__progress { opacity: 0; pointer-events: none; }
-
 /* ----------------------------------------------------------------- loading */
 .aw-loading {
   position: absolute; inset: 0; pointer-events: auto; display: grid; place-content: center; justify-items: center;
-  gap: calc(var(--u) * 3); background: linear-gradient(180deg, #123941, #1f6f78); text-align: center; padding: 24px;
+  gap: calc(var(--u) * 3); background: rgba(6, 18, 22, 0.5); text-align: center; padding: 24px;
 }
 .aw-loading__title { font-family: var(--display); font-size: 48px; line-height: 1; }
 .aw-loading__bar { width: min(420px, 80vw); height: calc(var(--u) * 6); border: var(--u) solid var(--cream); padding: var(--u); background: var(--ink); }
@@ -630,3 +616,72 @@ html[data-motion='reduced'] .aw-ui *, html[data-motion='reduced'] .aw-ui *::befo
 
 /* ---------------------------------------------------------- chat: who wrote it */
 .aw-msg__by { display: block; margin-top: 6px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+
+/* ------------------------------------------------- first paint, loading and the reveal */
+/* The picture behind the title and loading views until the live city is drawn (ui/boot). Before the
+   script has made its canvas, the root paints the same sky in the same bands, so nothing changes
+   colour when it does. */
+.aw-ui { visibility: visible; }
+.aw-ui::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, #0a1a1e 0 13.33%, #0c1f24 13.33% 26.67%, #0e252b 26.67% 40%, #102b32 40% 53.33%, #133138 53.33% 66.67%, #16383f 66.67% 80%, #0b1e24 80% 100%);
+}
+@media (max-aspect-ratio: 11/10) {
+  .aw-ui::before { background: linear-gradient(180deg, #0a1a1e 0 14.67%, #0c1f24 14.67% 29.33%, #0e252b 29.33% 44%, #102b32 44% 58.67%, #133138 58.67% 73.33%, #16383f 73.33% 88%, #0b1e24 88% 100%); }
+}
+.aw-ui.aw-live::before { display: none; }
+.aw-boot { position: absolute; left: 0; top: 0; image-rendering: pixelated; pointer-events: none; }
+/* A link straight to a stop skips the title: keep its prerendered copy out of the first paint. */
+html.aw-deep .aw-title { display: none; }
+
+/* Waking up. The title is in the page before the script is; until the script has wired the buttons
+   they are dim, then they light one after another. */
+.aw-title .aw-btn, .aw-title__stop { transition: opacity 180ms steps(3) calc(var(--i, 0) * 45ms), transform 80ms steps(2), background 80ms steps(2); }
+.aw-title.is-booting button { opacity: 0.36; cursor: default; }
+.aw-title.is-booting .aw-title__or { opacity: 0.5; }
+.aw-title__or { transition: opacity 180ms steps(3) 120ms; }
+
+/* The time in Auckland, beside the place: it is what lights the city. */
+.aw-title__clock { color: var(--kowhai); }
+.aw-title__clock::before { content: '·'; margin-right: calc(var(--u) * 2); color: var(--dim); }
+
+/* The loader: what is happening, how far along, and one true thing about it. */
+.aw-title__loader {
+  position: absolute; right: calc(var(--safe-r) + 6vw); bottom: calc(var(--safe-b) + 58px); width: min(340px, 34vw);
+  display: grid; gap: calc(var(--u) * 2);
+  transition: opacity 0.4s steps(4) 0.7s;
+}
+.aw-title__loadhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-family: var(--display); font-size: 28px; line-height: 1; }
+.aw-title__loadlabel { color: var(--cream); text-shadow: var(--u) var(--u) 0 var(--ink); }
+.aw-title__loadpct { color: var(--kowhai); text-shadow: var(--u) var(--u) 0 var(--ink); }
+.aw-title__bar { height: calc(var(--u) * 5); border: var(--u) solid var(--cream); padding: var(--u); background: var(--ink); box-shadow: var(--u) var(--u) 0 rgba(0, 0, 0, 0.5); }
+.aw-title__barfill {
+  display: block; height: 100%; width: 0;
+  background: repeating-linear-gradient(90deg, var(--kowhai) 0 calc(var(--u) * 3), #b88f10 calc(var(--u) * 3) calc(var(--u) * 4));
+  transition: width 0.25s steps(5);
+}
+/* Before the script can say how far along it is: a block sliding along the bar. */
+.aw-title__loader:not([data-known]) .aw-title__barfill { width: 30%; animation: aw-slide 1.2s steps(12) infinite; }
+.aw-title__loadnote { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+.aw-title__loader.is-done { opacity: 0; pointer-events: none; }
+.aw-title__loader.is-failed .aw-title__barfill { background: var(--pohutukawa); }
+.aw-title__loader.is-failed .aw-title__loadpct { display: none; }
+/* Ready: the key on the Fly button fills in. */
+.aw-title__cap { transition: background 0.2s steps(2), color 0.2s steps(2); }
+.aw-title.is-ready .aw-title__cap { background: var(--cream); color: var(--pohutukawa); border-color: var(--cream); opacity: 1; }
+.aw-btn--primary:hover .aw-title__cap { background: var(--ink); color: var(--kowhai); border-color: var(--ink); }
+
+@media (max-width: 1100px) {
+  .aw-title__loader { position: static; width: min(420px, 100%); margin-top: calc(var(--u) * 6); }
+}
+@media (max-width: 760px) {
+  /* The clock takes its own line under the place rather than breaking in the middle of either. */
+  .aw-title__place { flex-wrap: wrap; row-gap: 2px; }
+  .aw-title__clock { flex-basis: 100%; }
+  .aw-title__clock::before { content: none; }
+  /* The title covers the whole of a narrow screen, so the boot scene sits behind its text: keep it faint. */
+  .aw-ui:not(.aw-world-ready) .aw-title__scrim { background: linear-gradient(180deg, rgba(6, 18, 22, 0.88) 0%, rgba(6, 18, 22, 0.78) 55%, rgba(6, 18, 22, 0.62) 100%); }
+}
+@media (max-height: 560px) {
+  .aw-title__loader { position: static; width: min(420px, 100%); margin-top: calc(var(--u) * 4); }
+}
