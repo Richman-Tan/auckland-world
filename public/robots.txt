@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://richmantan.vercel.app/sitemap.xml
+Sitemap: https://richmantan.dev/sitemap.xml

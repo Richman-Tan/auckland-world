@@ -7,7 +7,7 @@ import { content } from '../src/content';
 import { GITHUB } from '../src/content/links';
 import { rng } from './flightWorld';
 
-const ORIGIN = 'https://richmantan.vercel.app';
+const ORIGIN = 'https://richmantan.dev';
 const LINKS = siteLinks(content);
 
 /* ------------------------------------------------------------ a stand-in for the SDK's stream */
@@ -75,7 +75,7 @@ function setup(events: Ev[], opts: FakeOptions = {}, extra = {}) {
   });
   const post = (question: string, headers: Record<string, string> = {}) =>
     handler(
-      new Request('https://richmantan.vercel.app/api/chat', {
+      new Request('https://richmantan.dev/api/chat', {
         method: 'POST',
         headers: { origin: ORIGIN, 'content-type': 'application/json', accept: 'text/event-stream, application/json', 'x-forwarded-for': '1.2.3.4', ...headers },
         body: JSON.stringify({ messages: [{ role: 'user', text: question }] }),

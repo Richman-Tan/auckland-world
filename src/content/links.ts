@@ -8,7 +8,7 @@ export const EMAIL = 'richmantan0@gmail.com';
  * page/index.html, public/sitemap.xml, public/robots.txt and the structured data must all agree
  * with it (tests/page.test.ts checks that they do).
  */
-export const SITE_URL = 'https://richmantan.vercel.app';
+export const SITE_URL = 'https://richmantan.dev';
 
 /**
  * The public copy of the CV, served from public/. It is not the CV sent to employers: it is rebuilt

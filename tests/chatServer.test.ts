@@ -7,7 +7,7 @@ import { inlineHtml } from '../src/content/renderHtml';
 import { siteModule } from '../scripts/chat/site';
 import { readFileSync } from 'node:fs';
 
-const ORIGIN = 'https://richmantan.vercel.app';
+const ORIGIN = 'https://richmantan.dev';
 const okMessage = (text: string, stop = 'end_turn') => ({
   content: [{ type: 'thinking', thinking: '', signature: 's' }, { type: 'text', text }],
   stop_reason: stop,
@@ -24,7 +24,7 @@ function setup(create = vi.fn(async () => okMessage('I build software across web
     ...extra,
   });
   const post = (body: unknown, headers: Record<string, string> = {}) =>
-    handler(new Request('https://richmantan.vercel.app/api/chat', {
+    handler(new Request('https://richmantan.dev/api/chat', {
       method: 'POST',
       headers: { origin: ORIGIN, 'content-type': 'application/json', 'x-forwarded-for': '1.2.3.4', ...headers },
       body: typeof body === 'string' ? body : JSON.stringify(body),
@@ -126,6 +126,9 @@ describe('chat endpoint helpers', () => {
   it('allows only the site, its previews and localhost', () => {
     expect(isSiteOrigin('https://richmantan.vercel.app')).toBe(true);
     expect(isSiteOrigin('https://richmantan.dev')).toBe(true);
+    expect(isSiteOrigin('https://www.richmantan.dev')).toBe(true);
+    expect(isSiteOrigin('https://richmantan.dev.evil.com')).toBe(false);
+    expect(isSiteOrigin('http://richmantan.dev')).toBe(false);
     expect(isSiteOrigin('https://richmantan-kd23swomc-richman-tans-projects-2141fd6d.vercel.app')).toBe(true);
     expect(isSiteOrigin('http://localhost:5173')).toBe(true);
     expect(isSiteOrigin('https://richmantan.vercel.app.evil.com')).toBe(false);

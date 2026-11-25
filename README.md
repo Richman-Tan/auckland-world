@@ -3,9 +3,9 @@
 [![CI](https://github.com/Richman-Tan/auckland-world/actions/workflows/ci.yml/badge.svg)](https://github.com/Richman-Tan/auckland-world/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Richman-Tan/auckland-world)](https://github.com/Richman-Tan/auckland-world/releases)
 
-**Live at [richmantan.vercel.app](https://richmantan.vercel.app/).** Richman Tan's portfolio as a little flight over real central Auckland. Fly a pixel plane to the beacons for projects, work, study and the rest, land inside the Sky Tower, chat on the Harbour Bridge, or read it all as a plain page at [`/page/`](https://richmantan.vercel.app/page/).
+**Live at [richmantan.dev](https://richmantan.dev/).** Richman Tan's portfolio as a little flight over real central Auckland. Fly a pixel plane to the beacons for projects, work, study and the rest, land inside the Sky Tower, chat on the Harbour Bridge, or read it all as a plain page at [`/page/`](https://richmantan.dev/page/).
 
-[![The title screen: the name and five stops on the left, the Sky Tower and the city behind](docs/screenshots/title.jpg)](https://richmantan.vercel.app/)
+[![The title screen: the name and five stops on the left, the Sky Tower and the city behind](docs/screenshots/title.jpg)](https://richmantan.dev/)
 
 The city is real: about 33,000 buildings from OpenStreetMap on terrain from LINZ's 1 m LiDAR survey, 7.2 by 8 km, packed into about 2 MB of map data and drawn at low resolution with dithered, toon-stepped shaders. There is no framework and no game engine, just TypeScript, [three.js](https://threejs.org/) and Vite. The title screen is interactive after 35 KB of gzipped JavaScript; three.js and the map load behind it.
 
@@ -20,7 +20,7 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 - **Talk.** The stop on the Harbour Bridge is a chat: scripted answers for the suggested questions, Claude for anything you type, grounded only in the site's own content.
 - **Watch the city.** The light follows the real time of day in Auckland. At night the windows come on and the Sky Tower is floodlit. Ferries cross the harbour and traffic runs over the bridge.
 - **Wait well.** The title is on screen before any script runs, and while the map loads a blueprint of the skyline goes up with it.
-- **Or skip all of it.** [`/page/`](https://richmantan.vercel.app/page/) is the same content as one static page with no JavaScript, and it is where you land without WebGL.
+- **Or skip all of it.** [`/page/`](https://richmantan.dev/page/) is the same content as one static page with no JavaScript, and it is where you land without WebGL.
 
 <table>
 <tr>

@@ -1,6 +1,8 @@
 /**
  * Dev-only: renders the real city behind the social-preview card at whatever size the page is
- * opened at (open it in a 1200x630 frame, then capture). ?a= sets the orbit angle in radians.
+ * opened at (open it in a 1200x630 frame, then capture). ?a= sets the orbit angle in radians,
+ * ?r= the distance, ?y= the height and ?s= how far the tower sits off centre.
+ * public/og.jpg is ?a=0.85&r=1600&y=290&s=0.42.
  */
 import '../src/app/base.css';
 import '../src/ui/styles/fonts.css';
