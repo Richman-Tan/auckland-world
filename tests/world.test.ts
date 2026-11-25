@@ -40,8 +40,46 @@ describe('world geometry on the fake map', () => {
     }
     expect(out.terrain.cols).toBe(meta.terrain.cols);
     expect(out.terrainMesh.positions.length / 3).toBe(meta.terrain.cols * meta.terrain.rows);
-    expect(out.terrainMesh.indices.length / 6).toBe((meta.terrain.cols - 1) * (meta.terrain.rows - 1));
     expect(out.grid.data.length).toBe(out.grid.cols * out.grid.rows);
+  });
+
+  it('draws every terrain cell that could be seen, and none that lies wholly under the sea', async () => {
+    const out = await buildWorld({
+      terrain: terrainBytes(),
+      buildings: buildingBytes(),
+      bounds: meta.bounds,
+      collisionCell: meta.collision.cell,
+      waterLevel: meta.water.level,
+      quality: 'high',
+    });
+    const { cols, rows, heights } = out.terrain;
+    const level = meta.water.level;
+    let dry = 0;
+    for (let r = 0; r < rows - 1; r++) {
+      for (let c = 0; c < cols - 1; c++) {
+        const h = [heights[r * cols + c], heights[r * cols + c + 1], heights[(r + 1) * cols + c], heights[(r + 1) * cols + c + 1]];
+        if (h.some((v) => v >= level)) dry++;
+      }
+    }
+    const m = out.terrainMesh;
+    expect(m.indices.length / 6).toBe(dry);
+    // The fake map has a harbour, so this is a real saving and not a no-op.
+    expect(dry).toBeLessThan((cols - 1) * (rows - 1) * 0.95);
+    expect(dry).toBeGreaterThan(0);
+    // No triangle is entirely below the water.
+    for (let i = 0; i < m.indices.length; i += 6) {
+      const cell = [...m.indices.subarray(i, i + 6)].map((v) => m.positions[v * 3 + 1]);
+      expect(cell.some((v) => v >= level)).toBe(true);
+    }
+    // The ring outside the map sinks below the sea, and the part that has is not drawn either.
+    const o = out.outskirts;
+    let ringCells = 0;
+    for (let i = 0; i < o.indices.length; i += 6) {
+      ringCells++;
+      const cell = [...o.indices.subarray(i, i + 6)].map((v) => o.positions[v * 3 + 1]);
+      expect(cell.some((v) => v >= level)).toBe(true);
+    }
+    expect(ringCells).toBeGreaterThan(0);
   });
 
   it('low quality drops buildings and decimates the terrain', async () => {

@@ -12,7 +12,12 @@ export interface MeshArrays {
  * (u west -> east, v north -> south, v = 0 at the top row of the image).
  * `stride` > 1 skips grid vertices (used for the low quality tier).
  */
-export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1): MeshArrays {
+/**
+ * `waterLevel`: cells whose four corners are all below it are left out. The sea is an opaque plane
+ * at that level, so they could never be seen, and on the real map they are a third of the grid.
+ * The vertices stay (and keep their numbering); only the triangles go.
+ */
+export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1, waterLevel = -Infinity): MeshArrays {
   const cs: number[] = [];
   for (let c = 0; c < t.cols; c += stride) cs.push(c);
   if (cs[cs.length - 1] !== t.cols - 1) cs.push(t.cols - 1);
@@ -39,7 +44,8 @@ export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1): Me
       uvs[o * 2 + 1] = (z - bounds.minZ) / d;
     }
   }
-  const indices = new Uint32Array((nc - 1) * (nr - 1) * 6);
+  const all = new Uint32Array((nc - 1) * (nr - 1) * 6);
+  const y = (v: number) => positions[v * 3 + 1];
   let k = 0;
   for (let j = 0; j < nr - 1; j++) {
     for (let i = 0; i < nc - 1; i++) {
@@ -47,6 +53,8 @@ export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1): Me
       const v10 = v00 + 1;
       const v01 = v00 + nc;
       const v11 = v01 + 1;
+      if (y(v00) < waterLevel && y(v10) < waterLevel && y(v01) < waterLevel && y(v11) < waterLevel) continue;
+      const indices = all;
       // Normal up (+y): (v00, v01, v10) has u = +z, w = +x, cross.y = u.z * w.x > 0.
       if (((i + j) & 1) === 0) {
         indices[k++] = v00; indices[k++] = v01; indices[k++] = v10;
@@ -57,7 +65,7 @@ export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1): Me
       }
     }
   }
-  return { positions, uvs, indices };
+  return { positions, uvs, indices: all.slice(0, k) };
 }
 
 export const OUTSKIRTS_MARGIN = 4000;
@@ -71,7 +79,7 @@ export const OUTSKIRTS_FLOOR = -2;
  * value and decay to OUTSKIRTS_FLOOR over OUTSKIRTS_DECAY metres. UVs are the ground-texture
  * UVs (they leave 0..1; the shader clamps them).
  */
-export function buildOutskirtsMesh(t: TerrainGrid, bounds: Bounds): MeshArrays {
+export function buildOutskirtsMesh(t: TerrainGrid, bounds: Bounds, waterLevel = -Infinity): MeshArrays {
   const m = OUTSKIRTS_MARGIN;
   const cell = OUTSKIRTS_CELL;
   const x0 = bounds.minX - m;
@@ -108,6 +116,7 @@ export function buildOutskirtsMesh(t: TerrainGrid, bounds: Bounds): MeshArrays {
     return xa >= bounds.minX && xa + cell <= bounds.maxX && za >= bounds.minZ && za + cell <= bounds.maxZ;
   };
   const list: number[] = [];
+  const y = (v: number) => positions[v * 3 + 1];
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       if (inside(i, j)) continue;
@@ -115,6 +124,8 @@ export function buildOutskirtsMesh(t: TerrainGrid, bounds: Bounds): MeshArrays {
       const v10 = v00 + 1;
       const v01 = v00 + nc;
       const v11 = v01 + 1;
+      // Under the sea (most of the ring, once it has sunk to the floor): never seen, so not drawn.
+      if (y(v00) < waterLevel && y(v10) < waterLevel && y(v01) < waterLevel && y(v11) < waterLevel) continue;
       list.push(v00, v01, v10, v10, v01, v11);
     }
   }

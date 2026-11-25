@@ -12,7 +12,6 @@ import {
   type BuildingRecord,
   type TerrainGrid,
 } from '../../src/shared/mapFormat';
-import { makeStyle } from '../../src/shared/palette';
 import { BOUNDS, PUBLIC_MAP_DIR } from '../config';
 import { writeGz } from '../lib/io';
 import {
@@ -29,7 +28,8 @@ import {
 } from '../lib/geom';
 import { loadOsm, polygonsOf, type OsmElement, type Tags } from '../lib/osm';
 import { WORK, ensure } from '../lib/paths';
-import { hash32, median, rng } from '../lib/raster';
+import { median, rng } from '../lib/raster';
+import { pickStyle } from '../lib/style';
 import { loadLandmarks } from './landmarks';
 import { createCanvas } from '@napi-rs/canvas';
 import { DEBUG_DIR } from '../lib/paths';
@@ -180,8 +180,6 @@ function medianAt(m: Mosaic, idx: Int32Array, dc = 0, dr = 0): { v: number; n: n
 
 /* -------------------------------------------------------------------- classes */
 
-const INDUSTRIAL = new Set(['industrial', 'warehouse', 'factory', 'manufacture', 'service', 'storage_tank', 'hangar', 'garage', 'garages', 'shed', 'container', 'boathouse', 'barn', 'farm_auxiliary']);
-const COMMERCIAL = new Set(['commercial', 'retail', 'office', 'supermarket', 'hotel', 'civic', 'public', 'hospital', 'school', 'university', 'college', 'kindergarten', 'church', 'cathedral', 'government', 'train_station', 'transportation', 'stadium', 'sports_hall', 'apartments', 'parking']);
 const SMALL_TYPES = new Set(['garage', 'garages', 'shed', 'carport', 'hut', 'greenhouse', 'kiosk', 'roof', 'container']);
 
 function defaultHeight(t: string): number {
@@ -192,22 +190,6 @@ function defaultHeight(t: string): number {
   if (t === 'industrial' || t === 'warehouse' || t === 'factory') return 8;
   if (t === 'school' || t === 'kindergarten') return 8;
   return 7;
-}
-
-function pickStyle(id: number, type: string, h: number): number {
-  const hv = hash32(id);
-  let wall: number;
-  if (h > 40) wall = hv % 3;
-  else if (INDUSTRIAL.has(type)) wall = 13;
-  else if (COMMERCIAL.has(type) || (type === 'yes' && h >= 12)) wall = 3 + (hv % 3);
-  else {
-    // houses and ordinary small buildings: weatherboard / villa pastels, some brick
-    wall = (hv >> 4) % 7 === 0 ? 11 + ((hv >> 8) % 2) : 6 + (hv % 5);
-  }
-  let roof: number;
-  if (h < 10) roof = (hv >> 12) % 6 === 0 ? 4 : (hv >> 16) % 4;
-  else roof = 5 + ((hv >> 12) % 3);
-  return makeStyle(wall, roof);
 }
 
 /* ---------------------------------------------------------------------- build */
@@ -393,7 +375,7 @@ export async function buildBuildings() {
       baseY = d.groundRef + d.minHeight;
       topY = Math.max(topY, baseY + 1);
     }
-    const style = pickStyle(d.id, d.tags.building ?? 'yes', d.h);
+    const style = pickStyle(d.id, d.tags.building ?? 'yes', d.h, d.tags);
     const lx = d.cx - BOUNDS.minX, lz = d.cz - BOUNDS.minZ;
     const gx = Math.floor(lx / 1000), gz = Math.floor(lz / 1000);
     return {

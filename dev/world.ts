@@ -41,6 +41,17 @@ const VIEWS: Record<string, { from: [number, number, number]; to: [number, numbe
   bridge: { from: [-1050, 90, -1750], to: [-1677, 45, -2177] },
   devonport: { from: [2150, 130, -1550], to: [2876, 20, -2193] },
   wide: { from: [-600, 420, 900], to: [0, 20, -1200] },
+  // Close-up views, for judging detail. Low and near, where the world has to hold up.
+  // The low pass beside the bridge's southern approach, heading east-north-east over the marina.
+  westhaven: { from: [-1745, 24, -1600], to: [-1359, 14, -1704] },
+  // Standing on the bridge deck south of the arch, looking along it.
+  deck: { from: [-1590, 52, -1980], to: [-1448, 48, -2244] },
+  ponsonby: { from: [-1650, 60, 900], to: [-1350, 15, 600] },
+  domain: { from: [1000, 110, 1650], to: [1292, 60, 1238] },
+  viaduct: { from: [-650, 60, -400], to: [-374, 5, -670] },
+  port: { from: [1500, 120, -300], to: [2100, 30, -650] },
+  edenpark: { from: [-1400, 140, 3200], to: [-1700, 20, 2830] },
+  junction: { from: [-650, 160, 1600], to: [-307, 40, 1230] },
 };
 
 addEventListener('keydown', (e) => keys.add(e.code));
@@ -84,9 +95,17 @@ async function main() {
   world.setActiveStop((params.get('active') as never) ?? null);
   resize();
 
+  // ?view=<name>, or any view at all with ?from=x,y,z&to=x,y,z
+  const triple = (name: string): [number, number, number] | null => {
+    const n = (params.get(name) ?? '').split(',').map(Number);
+    return n.length === 3 && n.every(Number.isFinite) ? [n[0], n[1], n[2]] : null;
+  };
   const view = params.get('view');
   const v = view ? VIEWS[view] : undefined;
-  if (v) lookAt(v.from, v.to);
+  const from = triple('from');
+  const to = triple('to');
+  if (from && to) lookAt(from, to);
+  else if (v) lookAt(v.from, v.to);
   else lookAt([-600, 200, 600], [-88, 150, -85]);
 
   // ?time=<solar hour or preset>; [ and ] scrub half an hour at a time.

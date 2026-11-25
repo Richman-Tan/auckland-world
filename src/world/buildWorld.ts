@@ -36,8 +36,8 @@ export async function buildWorld(input: BuildInput): Promise<BuildOutput> {
   const terrain = decodeTerrain(await inflateIfGzip(input.terrain));
   const buildings = decodeBuildings(await inflateIfGzip(input.buildings));
   const stride = input.quality === 'low' ? 2 : 1;
-  const terrainMesh = buildTerrainMesh(terrain, input.bounds, stride);
-  const outskirts = buildOutskirtsMesh(terrain, input.bounds);
+  const terrainMesh = buildTerrainMesh(terrain, input.bounds, stride, input.waterLevel);
+  const outskirts = buildOutskirtsMesh(terrain, input.bounds, input.waterLevel);
   const chunks = extrudeBuildings(buildings, { bounds: input.bounds, quality: input.quality });
   const grid = buildCollisionGrid(terrain, buildings, input.bounds, input.collisionCell, input.waterLevel);
   return { terrain, terrainMesh, outskirts, chunks, grid, buildingCount: buildings.count };
