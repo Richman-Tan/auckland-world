@@ -15,9 +15,17 @@ export interface ChatReply {
   topicId: string | null;
 }
 
+/**
+ * Called with the answer so far while it is still being written (only AI answers arrive in
+ * pieces). Each call carries everything received up to then, not just the new part. What it showed
+ * is provisional: the reply `ask` resolves with is the answer, and it can be a different one if
+ * the AI failed or declined part-way.
+ */
+export type LiveReply = (partial: Block[]) => void;
+
 export interface ChatBackend {
   greet(): ChatReply;
-  ask(q: ChatQuestion): Promise<ChatReply>;
+  ask(q: ChatQuestion, live?: LiveReply): Promise<ChatReply>;
   /** The chip label for a topic id. */
   promptFor(topicId: string): string | null;
   /** Whether typed questions are answered by the AI ('ai') or by keyword matching ('scripted'). */

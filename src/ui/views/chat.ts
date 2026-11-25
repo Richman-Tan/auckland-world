@@ -2,13 +2,14 @@
  * The bridge chat: Richman's pixel portrait, a conversation log, suggested questions and a
  * free-text box. Docked right on desktop, a bottom sheet on mobile (CSS), like the briefing.
  *
- * Replies type out a character at a time while the portrait talks. Screen readers get each reply
- * in full through a polite live region instead, and the log itself stays quiet.
+ * Replies type out a character at a time while the portrait talks. An AI answer starts typing as
+ * soon as its first sentence arrives and keeps going as the rest comes in. Screen readers get each
+ * reply once, in full, through a polite live region instead, and the log itself stays quiet.
  */
 import type { AppEvent } from '../../app/contracts';
-import { type ChatBackend, type ChatQuestion, type ChatReply, MAX_QUESTION } from '../../chat';
+import { type ChatBackend, type ChatQuestion, type ChatReply, type LiveReply, MAX_QUESTION } from '../../chat';
 import { blocksHtml } from '../../content/renderHtml';
-import type { SiteContent, StopId } from '../../content/types';
+import type { Block, SiteContent, StopId } from '../../content/types';
 import { ACCENTS } from '../../shared/palette';
 import { h, prefersReducedMotion as reducedMotion, setText } from '../dom';
 import { stopHash } from '../format';
@@ -20,57 +21,99 @@ const CPS = 85;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
 interface Typing {
+  /**
+   * What to type. Call it again with a longer version as an answer arrives in pieces: typing
+   * carries on from where it had got to. `last` says nothing more is coming.
+   */
+  set(html: string, last: boolean): void;
+  /** Show everything at once, now and for whatever arrives later. */
   finish(): void;
+  /** Resolves when the last version has been typed out in full. */
   done: Promise<void>;
 }
 
-/** Reveals every text node under el in order, keeping links and bold intact. */
+/** Reveals the text under el a character at a time, keeping links and bold intact. */
 function typewrite(el: HTMLElement, onTick: () => void): Typing {
-  const nodes: { node: Text; full: string }[] = [];
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const t = n as Text;
-    if (t.data.length) nodes.push({ node: t, full: t.data });
-  }
-  let resolve!: () => void;
-  const done = new Promise<void>((r) => (resolve = r));
-  let ni = 0;
-  let ci = 0;
+  let nodes: { node: Text; full: string }[] = [];
+  /** The text of the current version, its length, and how many of its characters are showing. */
+  let text = '';
+  let total = 0;
+  let typed = 0;
+  let last = false;
+  let rushed = reducedMotion();
   let budget = 0;
   let raf = 0;
-  let last = performance.now();
-  const finish = () => {
-    cancelAnimationFrame(raf);
-    for (const x of nodes) x.node.data = x.full;
-    ni = nodes.length;
-    onTick();
-    resolve();
-  };
-  if (!nodes.length || reducedMotion()) {
-    finish();
-    return { finish, done };
-  }
-  for (const x of nodes) x.node.data = '';
-  const step = (now: number) => {
-    budget += ((now - last) / 1000) * CPS;
-    last = now;
-    while (budget >= 1 && ni < nodes.length) {
-      const x = nodes[ni];
-      const take = Math.min(Math.floor(budget), x.full.length - ci);
-      ci += take;
-      budget -= take;
-      x.node.data = x.full.slice(0, ci);
-      if (ci >= x.full.length) {
-        ni++;
-        ci = 0;
-      }
+  let running = false;
+  let prev = performance.now();
+  let resolve!: () => void;
+  const done = new Promise<void>((r) => (resolve = r));
+
+  /** Show the first `typed` characters. */
+  function paint(): void {
+    let left = typed;
+    for (const x of nodes) {
+      const n = Math.min(left, x.full.length);
+      x.node.data = x.full.slice(0, n);
+      left -= n;
     }
     onTick();
-    if (ni >= nodes.length) resolve();
-    else raf = requestAnimationFrame(step);
+  }
+  const step = (now: number) => {
+    budget += ((now - prev) / 1000) * CPS;
+    prev = now;
+    const take = Math.min(Math.floor(budget), total - typed);
+    if (take > 0) {
+      typed += take;
+      budget -= take;
+      paint();
+    }
+    if (typed < total) {
+      raf = requestAnimationFrame(step);
+      return;
+    }
+    // Caught up. If more is still to come, set() starts the clock again.
+    running = false;
+    budget = 0;
+    if (last) resolve();
   };
-  raf = requestAnimationFrame(step);
-  return { finish, done };
+
+  return {
+    done,
+    set(html, isLast) {
+      const showing = text.slice(0, typed);
+      el.innerHTML = html;
+      nodes = [];
+      text = '';
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const t = n as Text;
+        if (!t.data.length) continue;
+        nodes.push({ node: t, full: t.data });
+        text += t.data;
+      }
+      total = text.length;
+      last = isLast;
+      // A different answer altogether (the first was withdrawn): type it from the start.
+      if (!text.startsWith(showing)) typed = 0;
+      typed = rushed ? total : Math.min(typed, total);
+      paint();
+      if (typed >= total) {
+        if (last) resolve();
+      } else if (!running) {
+        running = true;
+        prev = performance.now();
+        raf = requestAnimationFrame(step);
+      }
+    },
+    finish() {
+      rushed = true;
+      cancelAnimationFrame(raf);
+      running = false;
+      typed = total;
+      paint();
+      if (last) resolve();
+    },
+  };
 }
 
 export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => void, backend: ChatBackend) {
@@ -216,30 +259,67 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
     setTimeout(() => setText(status, text), 30);
   }
 
-  async function say(reply: () => Promise<ChatReply> | ChatReply, thinkMs: number): Promise<void> {
+  /**
+   * One reply: dots while it is on its way, then the bubble typing out. `typedQuestion` marks a
+   * reply to something the visitor typed, which is labelled with who wrote it (the AI, or the
+   * pre-written answers that stand in when the AI is off, busy or the question is one it leaves alone).
+   */
+  async function say(reply: (live: LiveReply) => Promise<ChatReply> | ChatReply, thinkMs: number, typedQuestion = false): Promise<void> {
     // Removing a focused chip would drop focus to the page: keep it in the chat.
     if (suggest.contains(document.activeElement)) (finePointer() ? field : name).focus({ preventScroll: true });
     suggest.replaceChildren();
     const dots = h('div', { class: 'aw-msg aw-msg--me aw-msg--typing', 'aria-hidden': 'true' }, h('span'), h('span'), h('span'));
     log.append(dots);
     scrollDown();
+
+    let msg: HTMLElement | null = null;
+    /** Put the reply (or the part of it that has arrived) in a bubble and type towards it. */
+    const show = (blocks: Block[], last: boolean): string => {
+      const html = blocksHtml(blocks, { newTab: true });
+      if (!msg) {
+        dots.remove();
+        const body = h('div', { class: 'aw-msg__body' });
+        msg = bubble('me', body);
+        msg.addEventListener('click', () => typing?.finish());
+        portrait.dataset.talking = '';
+        typing = typewrite(body, scrollDown);
+        if (waiting > 0 || !shown) typing.finish();
+      }
+      typing?.set(html, last);
+      return html;
+    };
+
+    // An answer that arrives in pieces starts showing after the thinking pause, not before it.
+    const thought = think(thinkMs);
+    let paused = true;
+    let settled = false;
+    let partial: Block[] | null = null;
+    void thought.then(() => {
+      paused = false;
+      if (!settled && partial) show(partial, false);
+    });
+    const live: LiveReply = (blocks) => {
+      if (settled) return;
+      partial = blocks;
+      if (!paused) show(blocks, false);
+    };
+
     let r: ChatReply;
     try {
-      [r] = await Promise.all([reply(), think(thinkMs)]);
+      [r] = await Promise.all([reply(live), thought]);
     } catch {
       r = { kind: 'fallback', blocks: content.chat.fallback, suggestions: content.chat.starters, topicId: null };
     }
-    dots.remove();
-    const body = h('div', { class: 'aw-msg__body' });
-    body.innerHTML = blocksHtml(r.blocks, { newTab: true });
-    announce(`${p.name}: ${body.textContent ?? ''}`);
-    const msg = bubble('me', body);
-    msg.addEventListener('click', () => typing?.finish());
-    portrait.dataset.talking = '';
-    typing = typewrite(body, scrollDown);
-    if (waiting > 0 || !shown) typing.finish();
-    await typing.done;
+    settled = true;
+    // The reply itself. If pieces were showing and the AI then failed or declined, this replaces them.
+    const html = show(r.blocks, true);
+    const plain = h('div');
+    plain.innerHTML = html;
+    announce(`${p.name}: ${plain.textContent ?? ''}`);
+    await typing?.done;
     typing = null;
+    if (typedQuestion && msg) (msg as HTMLElement).append(h('span', { class: 'aw-msg__by', text: r.kind === 'ai' ? 'AI-written' : 'Pre-written' }));
+    scrollDown();
     delete portrait.dataset.talking;
     renderSuggestions(r.suggestions);
   }
@@ -253,7 +333,7 @@ export function createChatView(content: SiteContent, dispatch: (e: AppEvent) => 
     chain(() => {
       waiting--;
       bubble('you', you);
-      return say(() => backend.ask(q), 380 + Math.min(420, label.length * 6));
+      return say((live) => backend.ask(q, live), 380 + Math.min(420, label.length * 6), 'text' in q);
     });
   }
 

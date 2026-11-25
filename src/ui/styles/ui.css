@@ -627,3 +627,6 @@ html[data-motion='reduced'] .aw-ui *, html[data-motion='reduced'] .aw-ui *::befo
 @media (pointer: coarse) {
   .aw-briefing__action .aw-kbd, .aw-briefing__onward .aw-kbd { display: none; }
 }
+
+/* ---------------------------------------------------------- chat: who wrote it */
+.aw-msg__by { display: block; margin-top: 6px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }

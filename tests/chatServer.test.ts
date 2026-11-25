@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildSystemPrompt, siteLinks } from '../src/chat/prompt';
 import { CHAT_MODEL, createChatHandler, isSiteOrigin, parseTurns, tidyAnswer } from '../src/chat/server';
 import { content } from '../src/content';
+import { inlineHtml } from '../src/content/renderHtml';
 import { siteModule } from '../scripts/chat/site';
 import { readFileSync } from 'node:fs';
 
@@ -111,6 +112,12 @@ describe('chat endpoint helpers', () => {
     expect(tidyAnswer('See [my GitHub](https://github.com/Richman-Tan) or [this](https://evil.example/x).', false, links)).toBe(
       'See [my GitHub](https://github.com/Richman-Tan) or this.',
     );
+  });
+  it('does not leave a link behind when one is nested in another', () => {
+    const out = tidyAnswer('Go [[here](a)](https://evil.example/x) now. And [sic].', false, siteLinks(content));
+    // The address is left as plain text, which the chat does not turn into a link.
+    expect(out).toBe('Go (here)(https://evil.example/x) now. And (sic).');
+    expect(inlineHtml(out)).not.toContain('<a ');
   });
   it('removes em dashes and ends a truncated answer at a sentence', () => {
     expect(tidyAnswer('Snowboarding — mostly.', false)).toBe('Snowboarding, mostly.');

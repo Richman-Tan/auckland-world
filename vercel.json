@@ -48,7 +48,8 @@
   ],
   "functions": {
     "api/chat.ts": {
-      "maxDuration": 15
+      "maxDuration": 15,
+      "supportsCancellation": true
     }
   }
 }
