@@ -145,7 +145,7 @@ The flight is a canvas, so what a crawler or a script-less browser needs is put 
 - `index.html` gets a summary inside `<noscript>`: who this is, and a link to every stop on `/page/`.
 - Both pages get schema.org data (a `Person` and a `WebSite`) in the head. It carries only what the site already says, and no contact address.
 - `public/sitemap.xml` lists the two pages and `public/robots.txt` points at it and keeps crawlers off `/api/`.
-- `public/googlec206d6d9faa205c9.html` proves ownership of the site to Google Search Console. Leave it where it is: Google re-checks it, and the property is unverified again if it goes.
+- `public/googlec206d6d9faa205c9.html` and the `google-site-verification` meta tag in `index.html` each prove ownership of the site to Google Search Console. Leave them where they are: Google re-checks, and the property is unverified again if both go.
 
 The site's address is `SITE_URL` in `src/content/links.ts`; a test checks that the canonical links, the sitemap and `robots.txt` all agree with it.
 
