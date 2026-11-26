@@ -46,6 +46,8 @@ export interface ExtrudeOptions {
   /** Chunk edge length in metres. */
   chunkSize?: number;
   quality?: QualityTier;
+  /** 1 for each building to leave out (a modelled landmark stands there instead). */
+  exclude?: Uint8Array;
 }
 
 export const CHUNK_SIZE = 1000;
@@ -100,10 +102,11 @@ export function groupIntoChunks(
   bounds: Bounds,
   size = CHUNK_SIZE,
   quality: QualityTier = 'high',
+  exclude?: Uint8Array,
 ): Map<string, number[]> {
   const out = new Map<string, number[]>();
   for (let i = 0; i < b.count; i++) {
-    if (skipBuilding(b, i, quality)) continue;
+    if (exclude?.[i] || skipBuilding(b, i, quality)) continue;
     const { cx, cz } = chunkOf(b, i, bounds, size);
     const key = `${cx},${cz}`;
     let list = out.get(key);
@@ -374,7 +377,7 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string, quali
 
 /** Extrude every building into 1 km chunks (at most (width/size) * (height/size) = 64 for the shipped world). */
 export function extrudeBuildings(b: BuildingsData, opts: ExtrudeOptions): ChunkGeometry[] {
-  const groups = groupIntoChunks(b, opts.bounds, opts.chunkSize ?? CHUNK_SIZE, opts.quality ?? 'high');
+  const groups = groupIntoChunks(b, opts.bounds, opts.chunkSize ?? CHUNK_SIZE, opts.quality ?? 'high', opts.exclude);
   const out: ChunkGeometry[] = [];
   for (const [key, ids] of groups) out.push(extrudeChunk(b, ids, key, opts.quality ?? 'high'));
   return out;

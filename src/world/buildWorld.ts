@@ -3,7 +3,8 @@
  * Called from geometry.worker.ts; also runs in Node (tests).
  */
 import { type CollisionGrid, buildCollisionGrid } from '../shared/collision';
-import { type Bounds, type TerrainGrid, decodeBuildings, decodeTerrain, isGzip } from '../shared/mapFormat';
+import { excludedBuildings } from '../shared/landmarkSites';
+import { type Bounds, type MapMeta, type TerrainGrid, decodeBuildings, decodeTerrain, isGzip } from '../shared/mapFormat';
 import { type ChunkGeometry, type QualityTier, extrudeBuildings } from './extrude';
 import { type MeshArrays, buildOutskirtsMesh, buildTerrainMesh } from './terrainMesh';
 
@@ -15,6 +16,8 @@ export interface BuildInput {
   collisionCell: number;
   waterLevel: number;
   quality: QualityTier;
+  /** The map's landmarks: the plain buildings a modelled one replaces are left out, and the port's containers put in. */
+  landmarks?: MapMeta['landmarks'];
 }
 
 export interface BuildOutput {
@@ -38,8 +41,8 @@ export async function buildWorld(input: BuildInput): Promise<BuildOutput> {
   const stride = input.quality === 'low' ? 2 : 1;
   const terrainMesh = buildTerrainMesh(terrain, input.bounds, stride, input.waterLevel);
   const outskirts = buildOutskirtsMesh(terrain, input.bounds, input.waterLevel);
-  const chunks = extrudeBuildings(buildings, { bounds: input.bounds, quality: input.quality });
-  const grid = buildCollisionGrid(terrain, buildings, input.bounds, input.collisionCell, input.waterLevel);
+  const chunks = extrudeBuildings(buildings, { bounds: input.bounds, quality: input.quality, exclude: excludedBuildings(buildings, input.landmarks) });
+  const grid = buildCollisionGrid(terrain, buildings, input.bounds, input.collisionCell, input.waterLevel, input.landmarks);
   return { terrain, terrainMesh, outskirts, chunks, grid, buildingCount: buildings.count };
 }
 
@@ -55,6 +58,7 @@ export function transferables(out: BuildOutput): ArrayBuffer[] {
   add(out.outskirts.uvs);
   add(out.outskirts.indices);
   add(out.grid.data);
+  if (out.grid.containers) add(out.grid.containers);
   for (const c of out.chunks) {
     add(c.positions);
     add(c.style);

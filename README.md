@@ -166,6 +166,18 @@ The ground image says what colour the land is, at three metres a pixel. That is 
 - **The shoreline.** Near the plane the land ends where the image's edge falls *between* its pixels. The sea reads the same edge from the image's smaller copies, which the sampler smooths, so the foam and the pale shallows follow the shore in bands rather than in three-metre blocks, and a jetty a few metres wide raises no surf.
 - **How it arrives.** The terrain starts with a material that knows only the image, as before. When `land.bin` has loaded, a second material is compiled off-screen and swapped in, and fades up; nothing about it can delay the first view.
 
+### Landmarks
+
+Five places are modelled by hand instead of being left as plain boxes: Auckland Museum, Eden Park, the Wynyard silos, the Wynyard Crossing footbridge and the port's container cranes. As with the Harbour Bridge, each is built from what the map measures of it, not from numbers typed in. The `landmarks` stage finds them in OpenStreetMap by name or kind and reads their sizes and heights from LiDAR into `meta.json`:
+
+- **Auckland Museum**: its outline's rectangle, the height of its roof and of its dome. Drawn as the stone block with its rounded southern end, the portico of columns on the north front, the hall behind it and the copper dome over the atrium; floodlit at night.
+- **Eden Park**: its four stands, each with its own measured height, and the pitch between the two long ones. Tiers of seats step up and back from mown turf, the two big stands carry their pale roofs, and a floodlight tower stands beyond each corner of the pitch.
+- **The Wynyard silos**: seven cylinders (Silo 7 and the six-pack), each at its mapped place and measured height. **Wynyard Crossing**: the footbridge end to end, with the masts and stays of its two lifting spans.
+- **The cranes are where LiDAR saw them.** Anything standing more than 40 m over the container terminal's quays is a crane: seven of them, three on the north quay and four on the west. Which way a boom points is the long axis of what was seen, from the part over land towards the part over water; one that reaches very high (over 95 m) is drawn with its boom raised, as they are parked, and a lower one with it down over the water.
+- **Containers**: about 730 stacks in the terminal's yard, in blocks of rows along its longest quay, clear of the quays themselves and of every building (`containerStacks`). One instanced draw call.
+
+`src/shared/landmarkSites.ts` holds their shapes, and three things read it: the plain buildings standing on a site are left out of the mesh and the collision grid; `src/world/landmarks/sites.ts` draws all five as one mesh of about 3,500 triangles; and `landmarkColliders` makes every part of them solid, with the container stacks put into the collision grid like buildings. A test flies a point into the top of each and just over it.
+
 ### The harbour
 
 The ground image paints a marina pier as a few specks of land, which is all three metres a pixel can do. `harbour.bin.gz` (24 KB, from the `harbour` stage) keeps the real outlines of the 297 piers OpenStreetMap maps here, and the berths along them.

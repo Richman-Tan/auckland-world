@@ -15,7 +15,8 @@ export function loadWorld(dir: string) {
   const meta = JSON.parse(readFileSync(resolve(dir, 'meta.json'), 'utf8')) as MapMeta;
   const terrain = decodeTerrain(gunzipSync(readFileSync(resolve(dir, meta.terrain.file))));
   const buildings = decodeBuildings(gunzipSync(readFileSync(resolve(dir, meta.buildings.file))));
-  const grid = buildCollisionGrid(terrain, buildings, meta.bounds, meta.collision.cell, meta.water.level);
+  // As the site builds it: the landmarks' own buildings left out, the port's containers in.
+  const grid = buildCollisionGrid(terrain, buildings, meta.bounds, meta.collision.cell, meta.water.level, meta.landmarks);
   const world = createWorldQuery(terrain, grid, landmarkColliders(meta), meta.bounds, meta.water.level);
   const stops = placeStops(content, meta, world.groundAt);
   return { meta, terrain, buildings, grid, world, stops };

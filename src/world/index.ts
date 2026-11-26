@@ -74,6 +74,7 @@ export const loadWorld: LoadWorld = async (opts: LoadWorldOptions): Promise<Worl
       collisionCell: meta.collision.cell,
       waterLevel: meta.water.level,
       quality: opts.quality,
+      landmarks: meta.landmarks,
     },
   });
 

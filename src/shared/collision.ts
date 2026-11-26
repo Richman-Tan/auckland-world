@@ -9,6 +9,7 @@
  *    dimensions are fixed here and must be matched by the visual models in src/world/landmarks.
  */
 import { HARBOUR_BRIDGE, bridgeModel } from './bridge';
+import { CONTAINER, STACK_SIZE, containerStacks, excludedBuildings, siteColliders, yardAxis } from './landmarkSites';
 import { PLANT_ROOM, buildingSeed, plantRoom } from './roofs';
 import {
   type Bounds,
@@ -26,7 +27,16 @@ export interface CollisionGrid {
   z0: number;
   /** Solid height per cell in decimetres ASL, row-major north -> south. */
   data: Int16Array;
+  /**
+   * The container stacks in the port's yard, which are in the grid like buildings and are handed
+   * on here so that what is drawn is exactly what was made solid (landmarkSites.ts, STACK_SIZE
+   * numbers a stack, then its base height appended: x, z, levels, colour, base).
+   */
+  containers?: Float32Array;
 }
+
+/** Numbers per stack in CollisionGrid.containers. */
+export const GRID_STACK_SIZE = STACK_SIZE + 1;
 
 export type Collider =
   | { kind: 'cylinder'; name: string; x: number; z: number; y0: number; y1: number; r: number }
@@ -120,6 +130,8 @@ export function landmarkColliders(meta: MapMeta): Collider[] {
       out.push({ kind: 'box', name: 'Harbour Bridge columns', cx, cz, ux, uz, hu: HARBOUR_BRIDGE.bentHalfLength, hv: HARBOUR_BRIDGE.bentHalfWidth, y0: m.groundAt(s) - 3, y1: m.bottomAt(s) + 0.5 });
     }
   }
+  // The museum, Eden Park, the silos, the footbridge and the port's cranes, where the map has them.
+  out.push(...siteColliders(meta.landmarks));
   return out;
 }
 
@@ -141,6 +153,9 @@ function pointInRing(xz: ArrayLike<number>, start: number, end: number, px: numb
 /**
  * Build the solid-height grid. A cell takes a building's top if the building's outer ring contains
  * the cell centre or any of four points 1.5 m from it (holes are ignored: courtyards count as solid).
+ *
+ * With `landmarks`, the plain buildings that a modelled landmark replaces are left out (their
+ * colliders are landmarkColliders'), and the port's container stacks are put in.
  */
 export function buildCollisionGrid(
   terrain: TerrainGrid,
@@ -148,6 +163,7 @@ export function buildCollisionGrid(
   bounds: Bounds,
   cell = 6,
   waterLevel = 0,
+  landmarks?: MapMeta['landmarks'],
 ): CollisionGrid {
   const cols = Math.ceil((bounds.maxX - bounds.minX) / cell);
   const rows = Math.ceil((bounds.maxZ - bounds.minZ) / cell);
@@ -164,7 +180,9 @@ export function buildCollisionGrid(
   }
   const offs = [0, 0, 1.5, 0, -1.5, 0, 0, 1.5, 0, -1.5];
   const xz = buildings.xz;
+  const left = excludedBuildings(buildings, landmarks);
   for (let b = 0; b < buildings.count; b++) {
+    if (left[b]) continue;
     const ring = buildings.buildingRingStart[b];
     const vs = buildings.ringVertexStart[ring] * 2;
     const ve = buildings.ringVertexStart[ring + 1] * 2;
@@ -204,7 +222,47 @@ export function buildCollisionGrid(
       }
     }
   }
-  return { cols, rows, cell, x0, z0, data };
+  const grid: CollisionGrid = { cols, rows, cell, x0, z0, data };
+  const port = landmarks?.port;
+  if (port) {
+    const groundAt = (x: number, z: number) => Math.max(waterLevel, sampleTerrain(terrain, x, z));
+    const at = (x: number, z: number) => {
+      const c = Math.floor((x - x0) / cell);
+      const r = Math.floor((z - z0) / cell);
+      return c < 0 || r < 0 || c >= cols || r >= rows ? -1 : r * cols + c;
+    };
+    // Open ground: dry land with nothing built on it.
+    const free = (x: number, z: number) => {
+      const i = at(x, z);
+      const g = groundAt(x, z);
+      return i >= 0 && g > waterLevel + 0.3 && data[i] / 10 <= g + 0.6;
+    };
+    const stacks = containerStacks(port, free);
+    const { ux, uz } = yardAxis(port.ring);
+    const n = stacks.length / STACK_SIZE;
+    const withBase = new Float32Array(n * GRID_STACK_SIZE);
+    const reach = Math.hypot(CONTAINER.length, CONTAINER.width) / 2 + cell;
+    for (let s = 0; s < n; s++) {
+      const x = stacks[s * STACK_SIZE];
+      const z = stacks[s * STACK_SIZE + 1];
+      const base = groundAt(x, z);
+      const top = Math.round((base + stacks[s * STACK_SIZE + 2] * CONTAINER.height) * 10);
+      withBase.set(stacks.subarray(s * STACK_SIZE, (s + 1) * STACK_SIZE), s * GRID_STACK_SIZE);
+      withBase[s * GRID_STACK_SIZE + STACK_SIZE] = base;
+      for (let cz = z - reach; cz <= z + reach; cz += cell) {
+        for (let cx = x - reach; cx <= x + reach; cx += cell) {
+          const i = at(cx, cz);
+          if (i < 0) continue;
+          // The cell's own centre, against the stack's rectangle grown by the same margin buildings get.
+          const px = x0 + (Math.floor((cx - x0) / cell) + 0.5) * cell - x;
+          const pz = z0 + (Math.floor((cz - z0) / cell) + 0.5) * cell - z;
+          if (Math.abs(px * ux + pz * uz) <= CONTAINER.length / 2 + 1.5 && Math.abs(-px * uz + pz * ux) <= CONTAINER.width / 2 + 1.5 && data[i] < top) data[i] = top;
+        }
+      }
+    }
+    grid.containers = withBase;
+  }
+  return grid;
 }
 
 function hitsCollider(c: Collider, x: number, y: number, z: number, radius: number): boolean {

@@ -79,6 +79,19 @@ export interface MapMeta {
       archTop: { x: number; z: number; y: number };
     };
     rangitoto: { x: number; z: number; summitY: number; baseRadius: number };
+    /**
+     * Landmarks modelled by hand from what the map measures of them. All optional: a map without
+     * one simply shows whatever plain buildings stand there.
+     */
+    museum?: SiteBox;
+    /** Eden Park: its stands (each a box, tall side away from the pitch) and the pitch between them. */
+    edenPark?: { stands: SiteBox[]; pitch: SiteBox };
+    /** Silos, as cylinders. */
+    silos?: { x: number; z: number; r: number; groundY: number; topY: number }[];
+    /** The Wynyard Crossing footbridge: end to end, its width and the height of its deck. */
+    wynyardCrossing?: { a: { x: number; z: number }; b: { x: number; z: number }; halfWidth: number; deckY: number };
+    /** The container terminal: its outline, and the cranes on its quays (where each stands, which way its boom points, how high it reaches). */
+    port?: { ring: number[]; groundY: number; cranes: { x: number; z: number; ux: number; uz: number; topY: number }[] };
   };
   places: { name: string; kind: string; x: number; z: number }[];
   /**
@@ -94,6 +107,22 @@ export interface MapMeta {
     harbour?: { file: string; piers: number; vertices: number; berths: number };
   };
   files: Record<string, FileEntry>;
+}
+
+/**
+ * A landmark's footprint as a rectangle: its centre, the unit vector along its long side, half its
+ * length and width, the ground it stands on, the height of the bulk of it and of its highest part.
+ */
+export interface SiteBox {
+  x: number;
+  z: number;
+  ux: number;
+  uz: number;
+  halfLength: number;
+  halfWidth: number;
+  groundY: number;
+  roofY: number;
+  topY: number;
 }
 
 export function isMapMeta(v: unknown): v is MapMeta {

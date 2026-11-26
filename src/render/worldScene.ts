@@ -1,5 +1,6 @@
 /** The assembled 3D world: implements WorldScene on top of the low-res renderer. */
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   type Camera,
@@ -28,7 +29,8 @@ import {
 } from 'three';
 import type { StopPlacement, WorldDetail, WorldScene, WorldStats } from '../app/contracts';
 import type { StopId } from '../content/types';
-import type { WorldQuery } from '../shared/collision';
+import { GRID_STACK_SIZE, type WorldQuery } from '../shared/collision';
+import { CONTAINER, CONTAINER_COLOURS, yardAxis } from '../shared/landmarkSites';
 import { BOAT_CAP, FOG_FAR, NEAR_RADIUS, TREE_CAP } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
 import { GROUND } from '../shared/palette';
@@ -41,6 +43,7 @@ import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge, buildHarbourBridgeDetail } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
 import { buildSkyDeck } from '../world/landmarks/skyDeck';
+import { buildSites } from '../world/landmarks/sites';
 import { buildSkyTower } from '../world/landmarks/skyTower';
 import { type NearSet, createNearSet, gatherIndices } from '../world/nearSet';
 import type { RibbonMesh } from '../world/ribbons';
@@ -229,6 +232,42 @@ export class WorldSceneImpl implements WorldScene {
     const bridge = new Mesh(track(buildHarbourBridge(meta)), lmMat);
     bridge.name = 'harbour-bridge';
     this.scene.add(bridge);
+    // The museum, Eden Park, the silos, the footbridge and the port's cranes: one mesh, where the map has them.
+    const sites = buildSites(meta);
+    if (sites) {
+      const mesh = new Mesh(track(sites), lmMat);
+      mesh.name = 'landmarks';
+      this.scene.add(mesh);
+    }
+    // The port's container stacks: the same ones the collision grid was given, one box each.
+    const stacks = parts.built.grid.containers;
+    if (stacks && stacks.length && meta.landmarks.port) {
+      const n = stacks.length / GRID_STACK_SIZE;
+      const boxGeo = track(new BoxGeometry(1, 1, 1));
+      // The ambient shader's own attributes: white paint, no lamp.
+      boxGeo.setAttribute('aTint', new BufferAttribute(new Float32Array(boxGeo.getAttribute('position').count * 3).fill(1), 3));
+      boxGeo.setAttribute('aGlow', new BufferAttribute(new Float32Array(boxGeo.getAttribute('position').count), 1));
+      const yard = new InstancedMesh(boxGeo, track(createAmbientMaterial(sh)), n);
+      yard.name = 'containers';
+      const { ux, uz } = yardAxis(meta.landmarks.port.ring);
+      const turn = -Math.atan2(ux, -uz);
+      const o = new Object3D();
+      const paint = new Color();
+      for (let i = 0; i < n; i++) {
+        const levels = stacks[i * GRID_STACK_SIZE + 2];
+        const high = levels * CONTAINER.height;
+        o.position.set(stacks[i * GRID_STACK_SIZE], stacks[i * GRID_STACK_SIZE + 4] + high / 2, stacks[i * GRID_STACK_SIZE + 1]);
+        o.rotation.set(0, turn, 0);
+        o.scale.set(CONTAINER.width, high, CONTAINER.length);
+        o.updateMatrix();
+        yard.setMatrixAt(i, o.matrix);
+        const v = parseInt(CONTAINER_COLOURS[stacks[i * GRID_STACK_SIZE + 3] % CONTAINER_COLOURS.length].slice(1), 16);
+        yard.setColorAt(i, paint.setRGB(((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255));
+      }
+      yard.computeBoundingSphere();
+      this.disposables.push(yard);
+      this.scene.add(yard);
+    }
     // Its lamp posts and flags, which are only drawn from close by (see update).
     const hb = meta.landmarks.harbourBridge;
     this.bridgeLine = { ax: hb.a.x, az: hb.a.z, bx: hb.b.x, bz: hb.b.z };
