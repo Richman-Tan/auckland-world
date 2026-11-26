@@ -18,7 +18,8 @@
     "map:check": "tsx scripts/check/map.ts",
     "map:fake": "tsx scripts/build/fake.ts",
     "map": "npm run map:fetch && npm run map:build && npm run map:check",
-    "check:bundle": "tsx scripts/check/bundle.ts"
+    "check:bundle": "tsx scripts/check/bundle.ts",
+    "icon": "tsx scripts/icon/build.ts"
   },
   "engines": {
     "node": "22.x"

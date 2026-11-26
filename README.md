@@ -110,6 +110,7 @@ Set `ANTHROPIC_API_KEY` in the Vercel project for the AI chat; without it the ch
 - `src/room/` the Sky Deck: layout and hotspots, walking, and the runtime (screens, signs, first-person camera); the room's mesh is `src/world/landmarks/skyDeck.ts`
 - `src/chat/` bridge chat: scripted matching, the AI backend (`remote.ts`), the `/api/chat` handler and its system prompt
 - `api/chat.ts` Vercel Node.js function for the AI chat; `api/_site.ts` is its generated prompt (`npm run chat:site`)
+- `scripts/icon/build.ts` the site icon (the initials in the title's style, on a 16 x 16 grid); `npm run icon` rewrites `public/favicon.svg` and the two PNGs
 - `src/content/` everything the site says (one source for the 3D view, `/page/` and the chat prompt), and `rules.ts`, what it never says
 - `src/shared/` binary map formats, collision, palette, time of day, detail ladder and ambient paths (pure; shared by the pipeline, the runtime and the tests)
 - `scripts/` map pipeline (fetch, build, check), the synthetic map generator, and the public CV build (`scripts/cv/`)
