@@ -9,6 +9,7 @@
  *    dimensions are fixed here and must be matched by the visual models in src/world/landmarks.
  */
 import { HARBOUR_BRIDGE, bridgeModel } from './bridge';
+import { PLANT_ROOM, buildingSeed, plantRoom } from './roofs';
 import {
   type Bounds,
   type BuildingsData,
@@ -179,7 +180,11 @@ export function buildCollisionGrid(
       if (z < minZ) minZ = z;
       if (z > maxZ) maxZ = z;
     }
-    const top = Math.round(buildings.topY[b] * 10);
+    // A tower's plant room is part of what can be hit: the whole building counts as that much taller.
+    const height = buildings.topY[b] - buildings.baseY[b];
+    const single = buildings.buildingRingStart[b + 1] - ring === 1;
+    const room = single && height >= PLANT_ROOM.minHeight ? plantRoom(xz.subarray(vs, ve), height, buildingSeed(xz[vs], xz[vs + 1])) : null;
+    const top = Math.round((buildings.topY[b] + (room ? room.height : 0)) * 10);
     const c0 = Math.max(0, Math.floor((minX - 1.5 - x0) / cell));
     const c1 = Math.min(cols - 1, Math.floor((maxX + 1.5 - x0) / cell));
     const r0 = Math.max(0, Math.floor((minZ - 1.5 - z0) / cell));

@@ -3,14 +3,28 @@
  *
  * Each building gets shared top and bottom ring vertices. Walls are quads between them, wound
  * so that they face outward for counter-clockwise outer rings on a north-up map (holes face
- * into the courtyard). Roofs are triangulated with earcut over the top ring (outer + holes)
- * and always face +y.
+ * into the courtyard). A flat roof is triangulated with earcut over the top ring (outer + holes)
+ * and faces +y. On the high tier a house whose footprint allows it gets a hip or gable roof
+ * instead (shared/roofs.ts): its walls stop at the eaves and two more vertices carry the ridge,
+ * at the height the map records as the building's top. A tower may carry a plant room.
  *
- * Vertex attributes per chunk: Float32 positions (x, y, z world metres) and a Uint8 pair
- * (style byte, building height in whole metres clamped to 255), never normalised.
+ * Vertex attributes per chunk: Float32 positions (x, y, z world metres) and four Uint16, never
+ * normalised and the same on every vertex of a building, which is how the building shader knows
+ * what it is drawing (STYLE_* below).
  */
 import earcut from 'earcut';
 import type { Bounds, BuildingsData } from '../shared/mapFormat';
+import { buildingSeed, pitchedStyle, plantRoom, roofPlan } from '../shared/roofs';
+
+/** Numbers per vertex in `style`. */
+export const STYLE_SIZE = 4;
+/** [0] the style byte, plus the building's own seed (0-255) times 256. */
+export const styleWord = (style: number, seed: number) => (style & 255) | ((seed & 255) << 8);
+/** [1] height base to top, [2] height of the base above sea level plus STYLE_BASE_OFFSET, [3] height of the eaves above the base: all in decimetres. */
+export const STYLE_BASE_OFFSET = 1000;
+const dm = (metres: number) => Math.min(65535, Math.max(0, Math.round(metres * 10)));
+/** The style a plant room is drawn in: dark cladding under a dark roof. */
+export const PLANT_ROOM_STYLE = 0xff;
 
 export type QualityTier = 'high' | 'low';
 
@@ -20,8 +34,8 @@ export interface ChunkGeometry {
   buildingCount: number;
   /** x, y, z per vertex. */
   positions: Float32Array;
-  /** (style, heightM) per vertex. */
-  style: Uint8Array;
+  /** STYLE_SIZE numbers per vertex. */
+  style: Uint16Array;
   indices: Uint16Array | Uint32Array;
   /** Bounding sphere: centre + radius. */
   sphere: { x: number; y: number; z: number; r: number };
@@ -114,7 +128,7 @@ function ringArea(xz: Float32Array, s: number, e: number): number {
   return a / 2;
 }
 
-/** Counts for sizing buffers. */
+/** Counts for sizing buffers: enough for any roof the building could be given. */
 function countChunk(b: BuildingsData, ids: number[]): { verts: number; tris: number } {
   let verts = 0;
   let tris = 0;
@@ -123,17 +137,18 @@ function countChunk(b: BuildingsData, ids: number[]): { verts: number; tris: num
     const r1 = b.buildingRingStart[i + 1];
     let v = 0;
     for (let r = r0; r < r1; r++) v += b.ringVertexStart[r + 1] - b.ringVertexStart[r];
-    verts += v * 2;
-    // walls: 2 per edge (edges = vertices); roof: v - 2 + 2 * holes at most
-    tris += v * 2 + v + 2 * (r1 - r0);
+    // The two rings, a ridge's two vertices and a plant room's eight.
+    verts += v * 2 + 10;
+    // walls: 2 per edge (edges = vertices); roof: v - 2 + 2 * holes flat, or 2 per edge pitched; a plant room's 10
+    tris += v * 2 + v * 2 + 2 * (r1 - r0) + 10;
   }
   return { verts, tris };
 }
 
-export function extrudeChunk(b: BuildingsData, ids: number[], key: string): ChunkGeometry {
+export function extrudeChunk(b: BuildingsData, ids: number[], key: string, quality: QualityTier = 'high'): ChunkGeometry {
   const cap = countChunk(b, ids);
   const positions = new Float32Array(cap.verts * 3);
-  const style = new Uint8Array(cap.verts * 2);
+  const style = new Uint16Array(cap.verts * STYLE_SIZE);
   const idx = new Uint32Array(cap.tris * 3);
   let nv = 0;
   let ni = 0;
@@ -146,7 +161,21 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
     const baseY = b.baseY[bi];
     const topY = b.topY[bi];
     const st = b.style[bi];
-    const h = Math.min(255, Math.max(0, Math.round(topY - baseY)));
+    const height = topY - baseY;
+    // The building's own number comes from its first corner as stored, so it is the same wherever it is asked for.
+    const first = b.ringVertexStart[r0];
+    const seed = buildingSeed(b.xz[first * 2], b.xz[first * 2 + 1]);
+    const word = styleWord(st, seed);
+    const put = (x: number, y: number, z: number, w0: number, heightDm: number, eaveDm: number): number => {
+      positions[nv * 3] = x;
+      positions[nv * 3 + 1] = y;
+      positions[nv * 3 + 2] = z;
+      style[nv * STYLE_SIZE] = w0;
+      style[nv * STYLE_SIZE + 1] = heightDm;
+      style[nv * STYLE_SIZE + 2] = dm(baseY + STYLE_BASE_OFFSET / 10);
+      style[nv * STYLE_SIZE + 3] = eaveDm;
+      return nv++;
+    };
 
     // Gather rings, normalised: outer CCW, holes CW (north-up). Local copies of (x, z).
     const rings: Float32Array[] = [];
@@ -166,6 +195,13 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
       rings.push(out);
     }
 
+    // A pitched roof, where the footprint and the tier allow one: the walls then stop at the eaves.
+    const plan = quality === 'high' && rings.length === 1 ? roofPlan(rings[0], height, seed, pitchedStyle(st)) : null;
+    const pitched = plan !== null && plan.kind !== 'flat';
+    const wallTop = pitched ? topY - plan.rise : topY;
+    const heightDm = dm(height);
+    const eaveDm = dm(wallTop - baseY);
+
     const bottomStart = nv;
     // Layout: for each ring, n top vertices then n bottom vertices.
     const ringTop: number[] = [];
@@ -173,23 +209,9 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
     for (const ring of rings) {
       const n = ring.length / 2;
       ringTop.push(nv);
-      for (let k = 0; k < n; k++) {
-        positions[nv * 3] = ring[k * 2];
-        positions[nv * 3 + 1] = topY;
-        positions[nv * 3 + 2] = ring[k * 2 + 1];
-        style[nv * 2] = st;
-        style[nv * 2 + 1] = h;
-        nv++;
-      }
+      for (let k = 0; k < n; k++) put(ring[k * 2], wallTop, ring[k * 2 + 1], word, heightDm, eaveDm);
       ringBottom.push(nv);
-      for (let k = 0; k < n; k++) {
-        positions[nv * 3] = ring[k * 2];
-        positions[nv * 3 + 1] = baseY;
-        positions[nv * 3 + 2] = ring[k * 2 + 1];
-        style[nv * 2] = st;
-        style[nv * 2 + 1] = h;
-        nv++;
-      }
+      for (let k = 0; k < n; k++) put(ring[k * 2], baseY, ring[k * 2 + 1], word, heightDm, eaveDm);
     }
 
     // Walls: bottom i, bottom j, top j, top i.
@@ -214,7 +236,72 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
       }
     }
 
-    // Roof: earcut over the top ring (outer + holes).
+    /** A roof triangle, wound to face the sky (or left as given if it stands upright). */
+    const roofTri = (a: number, bb: number, c: number) => {
+      const ux = positions[bb * 3] - positions[a * 3];
+      const uz = positions[bb * 3 + 2] - positions[a * 3 + 2];
+      const vx = positions[c * 3] - positions[a * 3];
+      const vz = positions[c * 3 + 2] - positions[a * 3 + 2];
+      const up = uz * vx - ux * vz;
+      // Nothing to draw where three corners coincide (a square hip roof's ridge is a point).
+      const uy = positions[bb * 3 + 1] - positions[a * 3 + 1];
+      const vy = positions[c * 3 + 1] - positions[a * 3 + 1];
+      if (Math.abs(up) < 1e-9 && Math.abs(uy * vz - uz * vy) < 1e-9 && Math.abs(ux * vy - uy * vx) < 1e-9) return;
+      idx[ni++] = a;
+      idx[ni++] = up < 0 ? c : bb;
+      idx[ni++] = up < 0 ? bb : c;
+    };
+
+    if (pitched) {
+      // Each wall's top edge runs up to the ridge: a triangle where both corners go to the same
+      // end of it, a quad (two triangles) where they go to different ends.
+      const ring = rings[0];
+      const n = ring.length / 2;
+      const ridge = [put(plan.a[0], topY, plan.a[1], word, heightDm, eaveDm), put(plan.b[0], topY, plan.b[1], word, heightDm, eaveDm)];
+      for (let k = 0; k < n; k++) {
+        const j = (k + 1) % n;
+        const tk = ringTop[0] + k;
+        const tj = ringTop[0] + j;
+        roofTri(tk, tj, ridge[plan.end[j]]);
+        if (plan.end[k] !== plan.end[j]) roofTri(tk, ridge[plan.end[j]], ridge[plan.end[k]]);
+      }
+    } else {
+      flatRoof();
+    }
+
+    // A plant room on a tower: a box on the roof, in its own dark style. Collision is told too (roofExtra).
+    if (rings.length === 1) {
+      const room = plantRoom(b.xz.subarray(first * 2, b.ringVertexStart[r0 + 1] * 2), height, seed);
+      if (room) {
+        const w = styleWord(PLANT_ROOM_STYLE, seed);
+        const hd = dm(height + room.height);
+        const top = room.corners.map(([x, z]) => put(x, topY + room.height, z, w, hd, hd));
+        const foot = room.corners.map(([x, z]) => put(x, topY, z, w, hd, hd));
+        // Walls face outward whichever way the corners run: wound by the box's own centre.
+        const cx = (room.corners[0][0] + room.corners[2][0]) / 2;
+        const cz = (room.corners[0][1] + room.corners[2][1]) / 2;
+        for (let k = 0; k < 4; k++) {
+          const j = (k + 1) % 4;
+          const [x0, z0] = room.corners[k];
+          const [x1, z1] = room.corners[j];
+          // A wall wound (bottom k, bottom j, top j) faces away from whatever is on its left on a
+          // north-up map, which in (x, z), with z running south, is where this is negative.
+          const out = (x1 - x0) * (cz - z0) - (z1 - z0) * (cx - x0) < 0;
+          const [p, q] = out ? [k, j] : [j, k];
+          idx[ni++] = foot[p];
+          idx[ni++] = foot[q];
+          idx[ni++] = top[q];
+          idx[ni++] = foot[p];
+          idx[ni++] = top[q];
+          idx[ni++] = top[p];
+        }
+        roofTri(top[0], top[1], top[2]);
+        roofTri(top[0], top[2], top[3]);
+      }
+    }
+
+    // A flat roof: earcut over the top ring (outer + holes).
+    function flatRoof() {
     const flat: number[] = [];
     const holes: number[] = [];
     const map: number[] = [];
@@ -246,6 +333,7 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
       idx[ni++] = map[bb];
       idx[ni++] = map[c];
     }
+    }
     for (let v = bottomStart; v < nv; v++) {
       const x = positions[v * 3];
       const y = positions[v * 3 + 1];
@@ -272,7 +360,7 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
   }
 
   const pos = positions.slice(0, nv * 3);
-  const sty = style.slice(0, nv * 2);
+  const sty = style.slice(0, nv * STYLE_SIZE);
   const indices = nv < 65536 ? Uint16Array.from(idx.subarray(0, ni)) : idx.slice(0, ni);
   return {
     key,
@@ -288,6 +376,6 @@ export function extrudeChunk(b: BuildingsData, ids: number[], key: string): Chun
 export function extrudeBuildings(b: BuildingsData, opts: ExtrudeOptions): ChunkGeometry[] {
   const groups = groupIntoChunks(b, opts.bounds, opts.chunkSize ?? CHUNK_SIZE, opts.quality ?? 'high');
   const out: ChunkGeometry[] = [];
-  for (const [key, ids] of groups) out.push(extrudeChunk(b, ids, key));
+  for (const [key, ids] of groups) out.push(extrudeChunk(b, ids, key, opts.quality ?? 'high'));
   return out;
 }

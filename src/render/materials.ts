@@ -343,13 +343,26 @@ void main() {
 
 /* --------------------------------------------------------------- buildings */
 
+/**
+ * Buildings. Every vertex of a building carries the same four numbers (world/extrude.ts): its style
+ * byte and its own seed, its height, where its base is, and how high its eaves are. From those and
+ * the surface's own normal this works out what is being drawn, a wall or a roof, of a house, a
+ * shop, an office tower or a shed, and how far up it the pixel is.
+ *
+ * Far away that is one flat colour, as it always was. Within uNearB of the camera the surface is
+ * drawn as what it is: weatherboards, windows and a front door on a house; a glazed shopfront
+ * under an awning; floors of windows on a tower, counted from its own ground floor, with a lobby
+ * at the bottom and a parapet at the top; ribbed cladding and roller doors on a shed; corrugated
+ * iron or tile on a pitched roof; plant on a flat one. Every pattern fades out as its period
+ * nears a pixel, to the colour it averages to.
+ */
 export function createBuildingMaterial(shared: SharedUniforms): ShaderMaterial {
   return make(
     shared,
     /* glsl */ `
-in vec2 aStyle;
+in vec4 aStyle;
 out vec3 vWorld;
-flat out vec2 vStyle;
+flat out vec4 vStyle;
 void main() {
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorld = wp.xyz;
@@ -358,41 +371,163 @@ void main() {
 }`,
     /* glsl */ `
 in vec3 vWorld;
-flat in vec2 vStyle;
+flat in vec4 vStyle;
 uniform vec3 uWall[16];
 uniform vec3 uRoof[16];
+uniform float uNearB;
+
+const vec3 GLASS = vec3(0.16, 0.34, 0.38);
+const vec3 LAMP = vec3(1.0, 0.82, 0.45);
+
+// One window, dark by day; lit ones glow at night. w is 1 inside the pane.
+vec3 pane(vec3 wall, vec3 alb, vec3 shade, float w, float lit) {
+  vec3 glass = mix(mix(alb * 0.42, GLASS, 0.65), LAMP, lit * 0.8);
+  return mix(wall, glass * mix(shade, vec3(1.0), lit), w);
+}
+
 void main() {
+  // Everything that needs screen-space derivatives first.
   vec3 n = flatNormal(vWorld);
-  int st = int(vStyle.x + 0.5);
-  bool roof = n.y > 0.5;
-  vec3 alb = roof ? uRoof[(st >> 4) & 15] : uWall[st & 15];
-  vec3 shade = lambert3(n);
-  vec3 c = alb * shade;
+  // How far along a wall a pixel is. Not the true distance along it: that needs the wall's
+  // direction, and the only one to hand is worked out per pixel, whose small error, multiplied
+  // by a position thousands of metres from the map's origin, scatters every window edge. Whichever
+  // of east or south the wall runs closer to is exact, and merely spaces things up to 1.4 times
+  // wider on a wall at 45 degrees.
+  float along = abs(n.x) > abs(n.z) ? vWorld.z : vWorld.x;
+  float pxA = max(abs(n.x) > abs(n.z) ? fwidth(vWorld.z) : fwidth(vWorld.x), 0.0001);
+  float pxY = max(fwidth(vWorld.y), 0.0001);
+  vec2 fwR = fwidth(vWorld.xz);
+  float pxR = max(max(fwR.x, fwR.y), 0.0001);
   float dist = length(vWorld - cameraPosition);
 
-  if (!roof && vStyle.y > 12.0 && n.y > -0.5) {
-    // procedural windows: floors every 3.2 m, columns every 2.8 m along the wall
-    vec2 hn = normalize(n.xz + vec2(1e-5));
-    float along = dot(vWorld.xz, vec2(-hn.y, hn.x));
-    vec2 cell = vec2(along / 2.8, vWorld.y / 3.2);
-    vec2 f = fract(cell);
-    float win = step(0.18, f.x) * step(f.x, 0.82) * step(0.28, f.y) * step(f.y, 0.80);
-    float fw = max(fwidth(cell.x), fwidth(cell.y));
-    float fade = 1.0 - smoothstep(0.22, 0.5, fw);
-    // About one window in seven is lit in the afternoon; by night half of them are.
-    float lit = step(mix(0.86, 0.5, uNight), hash21(floor(cell)));
-    vec3 glass = mix(alb * 0.42, vec3(0.16, 0.34, 0.38), 0.65);
-    glass = mix(glass, vec3(1.0, 0.82, 0.45), lit * 0.8);
-    vec3 wc = mix(alb * shade, glass * mix(shade, vec3(1.0), lit), win);
-    // far away the pattern averages out to a slightly darker wall, with a warm lift from the lit
-    // windows at night so distant towers still read as occupied
-    vec3 farC = alb * shade * 0.9 + vec3(0.5, 0.38, 0.18) * (uNight * 0.24);
-    c = mix(farC, wc, fade);
+  int word = int(vStyle.x + 0.5);
+  int st = word & 255;
+  float seed = float(word >> 8);
+  float height = vStyle.y * 0.1;
+  float up = vWorld.y - (vStyle.z * 0.1 - ${(1000 / 10).toFixed(1)});
+  float eave = vStyle.w * 0.1;
+  int wallI = st & 15;
+  int roofI = (st >> 4) & 15;
+  bool roof = n.y > 0.5;
+  vec3 alb = roof ? uRoof[roofI] : uWall[wallI];
+  // Far away a pitched roof is lit as if it were flat, so a suburb is not a field of two-tone specks.
+  vec3 shade = lambert3(roof ? normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(450.0, 1000.0, dist))) : n);
+  vec3 c = alb * shade;
+  float near = uNearB > 1.0 ? 1.0 - smoothstep(0.75 * uNearB, uNearB, dist) : 0.0;
+  // About one window in seven is lit in the afternoon; by night half of them are.
+  float litAbove = mix(0.86, 0.5, uNight);
+
+  if (roof) {
+    if (near > 0.0) {
+      vec3 r = c;
+      if (roofI <= 3) {
+        // Corrugated iron: ribs down the fall of the roof, and a pale cap along the ridge.
+        bool sloping = length(n.xz) > 0.2;
+        float across = sloping ? along : vWorld.x * 0.8 + vWorld.z * 0.6;
+        r *= 1.0 - 0.1 * (step(fract(across / 0.9), 0.32) - 0.32) * keep(sloping ? pxA : pxR, 0.9);
+        if (height - eave > 0.5) r = mix(r, r * 1.22, step(height - 0.22, up) * (1.0 - smoothstep(0.25, 0.6, pxY)));
+      } else if (roofI == 4) {
+        // Tile: courses across the fall.
+        r *= 1.0 - 0.12 * (step(fract(up / 0.3), 0.3) - 0.3) * keep(pxY, 0.3);
+      } else if (roofI == 8) {
+        // A glass roof: glazing bars.
+        vec2 g = fract(vWorld.xz / 2.4);
+        r *= 1.0 - 0.18 * max(step(g.x, 0.1), step(g.y, 0.1)) * keep(pxR, 2.4);
+      } else if (roofI == 13) {
+        r *= 1.0 + 0.2 * (floor(vnoise(vWorld.xz / 2.5) * 3.0) / 3.0 - 0.33) * keep(pxR, 2.5);
+      } else if (roofI != 15) {
+        // A flat roof: a unit or a skylight here and there, each with its shadow.
+        vec2 cell = floor(vWorld.xz / 5.5);
+        vec2 f = fract(vWorld.xz / 5.5) * 5.5;
+        float h = hash21(cell + seed);
+        float unit = step(0.84, h) * step(1.2, f.x) * step(f.x, 3.0) * step(1.2, f.y) * step(f.y, 3.0);
+        float shadow = step(0.84, h) * step(3.0, f.x) * step(f.x, 3.5) * step(1.5, f.y) * step(f.y, 3.3);
+        r = mix(r, r * (h > 0.92 ? 1.28 : 0.72), unit * keep(pxR, 5.5));
+        r *= 1.0 - 0.25 * shadow * keep(pxR, 5.5);
+      }
+      c = mix(c, r, near);
+    }
+  } else if (n.y > -0.5) {
+    bool tall = height > 12.0;
+    if (tall && wallI != 15) {
+      // Floors of windows, counted from the building's own ground floor: 3.2 m apart, a column
+      // every 2.8 m, a lobby at the bottom and a plain parapet at the top.
+      vec2 cell = vec2(along / 2.8, (up - 0.8) / 3.2);
+      vec2 f = fract(cell);
+      float win = step(0.18, f.x) * step(f.x, 0.82) * step(0.28, f.y) * step(f.y, 0.80);
+      win *= step(up, height - 1.0) * step(0.8, up);
+      float fw = max(pxA / 2.8, pxY / 3.2);
+      float fade = 1.0 - smoothstep(0.22, 0.5, fw);
+      float lit = step(litAbove, hash21(floor(cell)));
+      vec3 wc = pane(alb * shade, alb, shade, win, lit);
+      if (wallI <= 5 && up < 4.0) {
+        // The lobby: glass from the pavement up, between piers.
+        float glazed = step(0.5, up) * step(up, 3.5) * step(0.12, f.x) * step(f.x, 0.88);
+        wc = pane(alb * shade, alb, shade, glazed, uNight * 0.9);
+      }
+      // far away the pattern averages out to a slightly darker wall, with a warm lift from the lit
+      // windows at night so distant towers still read as occupied
+      vec3 farC = alb * shade * 0.9 + vec3(0.5, 0.38, 0.18) * (uNight * 0.24);
+      c = mix(farC, wc, fade);
+    } else if (near > 0.0) {
+      vec3 w = c;
+      float fineY = 1.0 - smoothstep(0.25, 0.6, pxY);
+      if (wallI == 15) {
+        // A plant room: louvres.
+        w *= 1.0 - 0.16 * (step(fract(up / 0.6), 0.4) - 0.4) * keep(pxY, 0.6);
+      } else if (wallI == 13) {
+        // A shed: ribbed cladding, and a roller door in some of its bays.
+        w *= 1.0 - 0.08 * (step(fract(along / 1.4), 0.3) - 0.3) * keep(pxA, 1.4);
+        vec2 bay = vec2(floor(along / 9.0), seed);
+        float in_ = fract(along / 9.0) * 9.0;
+        float door = step(hash21(bay), 0.3) * step(2.4, in_) * step(in_, 6.6) * step(up, min(4.4, eave - 0.6));
+        vec3 slats = alb * shade * (0.62 - 0.1 * step(fract(up / 0.5), 0.3) * fineY);
+        w = mix(w, slats, door * keep(pxA, 9.0));
+      } else if (wallI >= 6) {
+        // A house. Weatherboards (brick is left plain), then a window in most bays of each floor
+        // and, in a few bays at ground level, the front door.
+        if (wallI <= 10) w *= 1.0 - 0.09 * (step(fract(up / 0.5), 0.16) - 0.16) * keep(pxY, 0.5);
+        float floorY = (up - 0.35) / 2.8;
+        float level = floor(floorY);
+        float inFloor = fract(floorY) * 2.8;
+        vec2 bay = vec2(floor(along / 3.3), level + seed);
+        float in_ = fract(along / 3.3) * 3.3;
+        float h = hash21(bay);
+        float room = step(up, eave - 0.25) * step(0.35, up);
+        float win = step(h, 0.72) * step(0.95, in_) * step(in_, 2.35) * step(0.95, inFloor) * step(inFloor, 2.1) * room;
+        float isDoor = step(0.86, h) * step(level, 0.5) * step(-0.5, level);
+        float door = isDoor * step(1.15, in_) * step(in_, 2.15) * step(inFloor, 2.15) * room;
+        float show = keep(pxA, 3.3);
+        w = pane(w, alb, shade, win * show, step(litAbove, hash21(bay + 7.0)));
+        float paint = fract(seed * 0.618);
+        vec3 doorC = paint < 0.3 ? vec3(0.45, 0.14, 0.13) : (paint < 0.55 ? vec3(0.15, 0.22, 0.34) : (paint < 0.8 ? vec3(0.2, 0.2, 0.22) : vec3(0.2, 0.33, 0.25)));
+        w = mix(w, doorC * shade, door * show);
+        // The foundation, and the shadow under the eaves.
+        w *= 1.0 - 0.2 * step(up, 0.35) * fineY;
+        w *= 1.0 - 0.16 * step(eave - 0.3, up) * step(up, eave) * fineY;
+      } else {
+        // A shop or a low office: a glazed front between piers under a coloured awning, and a
+        // row of windows to each floor above.
+        float bayX = fract(along / 3.4);
+        float show = keep(pxA, 3.4);
+        float front = step(0.45, up) * step(up, 2.75) * step(0.07, bayX) * step(bayX, 0.93);
+        w = pane(w, alb, shade, front * show, uNight * 0.85);
+        float stripe = fract(seed * 0.618);
+        vec3 awning = stripe < 0.25 ? vec3(0.62, 0.2, 0.18) : (stripe < 0.5 ? vec3(0.2, 0.36, 0.3) : (stripe < 0.75 ? vec3(0.18, 0.26, 0.42) : vec3(0.8, 0.72, 0.5)));
+        w = mix(w, awning * shade, step(2.9, up) * step(up, 3.45) * step(3.6, eave) * fineY);
+        float floorY = (up - 3.9) / 3.2;
+        vec2 cell = vec2(floor(along / 3.4), floor(floorY));
+        float inFloor = fract(floorY) * 3.2;
+        float win = step(3.9, up) * step(up, eave - 0.5) * step(0.18, bayX) * step(bayX, 0.82) * step(0.9, inFloor) * step(inFloor, 2.3);
+        w = pane(w, alb, shade, win * show, step(litAbove, hash21(cell + seed)));
+      }
+      c = mix(c, w, near);
+    }
   }
   c *= planeShadow(vWorld);
   outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
 }`,
-    { uWall: shared.uWall, uRoof: shared.uRoof },
+    { uWall: shared.uWall, uRoof: shared.uRoof, uNearB: { value: 0 } },
   );
 }
 

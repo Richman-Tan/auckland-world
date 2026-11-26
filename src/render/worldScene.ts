@@ -29,6 +29,7 @@ import type { MapMeta } from '../shared/mapFormat';
 import type { Look } from '../shared/timeOfDay';
 import { type Ambient, createAmbient } from '../world/ambient';
 import type { DetailOutput, LandImage } from '../world/buildDetail';
+import { STYLE_SIZE } from '../world/extrude';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge, buildHarbourBridgeDetail } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
@@ -103,6 +104,7 @@ export class WorldSceneImpl implements WorldScene {
   private terrain: Mesh;
   private groundImage: Texture;
   private land: { material: ShaderMaterial; fade: number } | null = null;
+  private buildingMaterial: ShaderMaterial;
   private bridgeDetail: Mesh;
   private bridgeLine: { ax: number; az: number; bx: number; bz: number };
   private lastRender = 0;
@@ -167,10 +169,11 @@ export class WorldSceneImpl implements WorldScene {
 
     // Buildings: one mesh per 1 km chunk.
     const buildingMat = track(createBuildingMaterial(sh));
+    this.buildingMaterial = buildingMat;
     for (const c of parts.built.chunks) {
       const g = track(new BufferGeometry());
       g.setAttribute('position', new BufferAttribute(c.positions, 3));
-      g.setAttribute('aStyle', new BufferAttribute(c.style, 2, false));
+      g.setAttribute('aStyle', new BufferAttribute(c.style, STYLE_SIZE, false));
       g.setIndex(new BufferAttribute(c.indices, 1));
       g.boundingSphere = new Sphere(new Vector3(c.sphere.x, c.sphere.y, c.sphere.z), c.sphere.r);
       const m = new Mesh(g, buildingMat);
@@ -355,6 +358,8 @@ export class WorldSceneImpl implements WorldScene {
       l.material.uniforms.uDetail.value = l.fade;
       l.material.uniforms.uGroundR.value = NEAR_RADIUS.ground * this.near;
     }
+    // Wall and roof detail reaches as far as the detail level allows.
+    this.buildingMaterial.uniforms.uNearB.value = NEAR_RADIUS.buildings * this.near;
     // The bridge's lamp posts and flags: only when the plane is near the bridge.
     {
       const l = this.bridgeLine;

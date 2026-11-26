@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCollisionGrid, createWorldQuery } from '../src/shared/collision';
 import { decodeBuildings, encodeBuildings } from '../src/shared/mapFormat';
+import { buildingSeed, plantRoom } from '../src/shared/roofs';
 
 describe('collision grid', () => {
   const heights = new Float32Array(11 * 11).fill(10);
@@ -12,9 +13,16 @@ describe('collision grid', () => {
   const grid = buildCollisionGrid(terrain, buildings, bounds, 6);
   const world = createWorldQuery(terrain, grid, [{ kind: 'cylinder', name: 'pole', x: -50, z: -50, y0: 0, y1: 100, r: 3 }], bounds);
 
-  it('raises cells under buildings to their tops', () => {
-    expect(world.solidAt(15, -15)).toBeCloseTo(55, 1);
+  it('raises cells under buildings to their tops, and a tower to the top of its plant room', () => {
+    // This one is a tower (47 m, 900 m^2 of roof), so it carries a plant room, which can be hit too.
+    const room = plantRoom([0, 0, 30, 0, 30, -30, 0, -30], 47, buildingSeed(0, 0));
+    expect(room).not.toBeNull();
+    expect(world.solidAt(15, -15)).toBeCloseTo(55 + room!.height, 1);
     expect(world.solidAt(-60, 60)).toBeCloseTo(10, 1);
+    // A lower building is exactly as tall as the map says.
+    const low = decodeBuildings(encodeBuildings([{ rings: [[0, 0, 30, 0, 30, -30, 0, -30]], baseY: 8, topY: 30, style: 0 }]));
+    const lowWorld = createWorldQuery(terrain, buildCollisionGrid(terrain, low, bounds, 6), [], bounds);
+    expect(lowWorld.solidAt(15, -15)).toBeCloseTo(30, 1);
   });
 
   it('includes cells whose centre is within 1.5 m of a footprint', () => {

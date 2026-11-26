@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type BuildingRecord, decodeBuildings, encodeBuildings } from '../src/shared/mapFormat';
-import { extrudeBuildings, groupIntoChunks, skipBuilding } from '../src/world/extrude';
+import { extrudeBuildings, groupIntoChunks, skipBuilding, STYLE_BASE_OFFSET, STYLE_SIZE } from '../src/world/extrude';
 
 const bounds = { minX: -100, maxX: 100, minZ: -100, maxZ: 100 };
 
@@ -39,10 +39,18 @@ describe('extrudeBuildings', () => {
     expect(chunk.positions.length / 3).toBe(8);
     expect(chunk.indices.length / 3).toBe(10);
     expect(chunk.indices).toBeInstanceOf(Uint16Array);
-    expect(chunk.style.length).toBe(16);
-    // style byte and rounded height are carried per vertex
-    expect(chunk.style[0]).toBe(0x21);
-    expect(chunk.style[1]).toBe(12);
+    // Four numbers a vertex, the same on every vertex of the building: the style byte with the
+    // building's own seed above it, then its height, its base and its eaves in decimetres.
+    expect(chunk.style).toBeInstanceOf(Uint16Array);
+    expect(chunk.style.length).toBe(8 * STYLE_SIZE);
+    for (let v = 0; v < 8; v++) {
+      expect(chunk.style[v * STYLE_SIZE] & 255).toBe(0x21);
+      expect(chunk.style[v * STYLE_SIZE]).toBe(chunk.style[0]);
+      expect(chunk.style[v * STYLE_SIZE + 1]).toBe(120);
+      expect(chunk.style[v * STYLE_SIZE + 2]).toBe(STYLE_BASE_OFFSET);
+      // A flat roof: the eaves are the top.
+      expect(chunk.style[v * STYLE_SIZE + 3]).toBe(120);
+    }
   });
 
   it('a building with a hole shares top/bottom ring vertices: 16 vertices, 24 triangles', () => {

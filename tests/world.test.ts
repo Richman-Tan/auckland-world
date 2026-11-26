@@ -33,7 +33,7 @@ describe('world geometry on the fake map', () => {
     expect(out.buildingCount).toBe(meta.buildings.count);
     expect(out.chunks.reduce((n, c) => n + c.buildingCount, 0)).toBe(meta.buildings.count);
     for (const c of out.chunks) {
-      expect(c.style.length / 2).toBe(c.positions.length / 3);
+      expect(c.style.length / 4).toBe(c.positions.length / 3);
       const max = Math.max(...c.indices);
       expect(max).toBeLessThan(c.positions.length / 3);
       expect(c.indices.length % 3).toBe(0);
