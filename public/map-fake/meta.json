@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-04T21:35:15.513Z",
+ "generatedAt": "2026-11-26T02:44:27.421Z",
  "fake": true,
  "sources": {},
  "attribution": [
@@ -498,6 +498,13 @@
    "z": -2193.5973121430725
   }
  ],
+ "detail": {
+  "roads": {
+   "file": "roads.bin.gz",
+   "ways": 60,
+   "vertices": 120
+  }
+ },
  "files": {
   "terrain.bin.gz": {
    "bytes": 30775,
@@ -518,6 +525,10 @@
   "minimap.webp": {
    "bytes": 29598,
    "sha256": "e79bcfa9dfda9dc8076d344c9d2637cbe522b120041ddd7203358dec6ab68ef9"
+  },
+  "roads.bin.gz": {
+   "bytes": 262,
+   "sha256": "bc5c0eb03825ea18cd18e4df19ec8ff7b9965e4a0c08110ff05fa1161dc62682"
   }
  }
 }

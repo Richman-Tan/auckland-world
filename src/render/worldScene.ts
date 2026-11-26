@@ -3,6 +3,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   type Camera,
+  DynamicDrawUsage,
   Mesh,
   type Object3D,
   PerspectiveCamera,
@@ -17,20 +18,24 @@ import {
 import type { StopPlacement, WorldDetail, WorldScene, WorldStats } from '../app/contracts';
 import type { StopId } from '../content/types';
 import type { WorldQuery } from '../shared/collision';
-import { FOG_FAR } from '../shared/detail';
+import { FOG_FAR, NEAR_RADIUS } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
 import type { Look } from '../shared/timeOfDay';
 import { type Ambient, createAmbient } from '../world/ambient';
+import type { DetailOutput } from '../world/buildDetail';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
 import { buildSkyDeck } from '../world/landmarks/skyDeck';
 import { buildSkyTower } from '../world/landmarks/skyTower';
+import { type NearSet, createNearSet, gatherIndices } from '../world/nearSet';
+import type { RibbonMesh } from '../world/ribbons';
 import { Beacons } from './beacons';
 import {
   createBuildingMaterial,
   createLandmarkMaterial,
   createOutskirtsMaterial,
+  createRibbonMaterial,
   createSkyMaterial,
   createTerrainMaterial,
   createWaterMaterial,
@@ -49,6 +54,8 @@ export interface WorldParts {
   quality: keyof typeof FOG_FAR;
   ground: Texture;
   built: BuildOutput;
+  /** Fetches and builds the close-up detail; called once, after the city is on screen. */
+  detail?: () => Promise<DetailOutput>;
 }
 
 function meshGeometry(m: { positions: Float32Array; uvs: Float32Array; indices: Uint32Array }): BufferGeometry {
@@ -80,6 +87,12 @@ export class WorldSceneImpl implements WorldScene {
   private fogFar: number;
   private skyDeck: Mesh;
   private ambient: Ambient;
+  /** Close-up detail: where it comes from, whether it has been asked for, and how far out it reaches. */
+  private detailSource: (() => Promise<DetailOutput>) | null = null;
+  private detailAsked = false;
+  private near = 1;
+  private disposed = false;
+  private ribbons: { mesh: Mesh; material: ShaderMaterial; geometry: BufferGeometry; index: BufferAttribute; data: RibbonMesh; set: NearSet; fade: number } | null = null;
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
@@ -88,6 +101,7 @@ export class WorldSceneImpl implements WorldScene {
   constructor(parts: WorldParts) {
     this.meta = parts.meta;
     this.query = parts.query;
+    this.detailSource = parts.detail ?? null;
     this.px = new PixelRenderer(parts.canvas);
     this.renderer = this.px.renderer;
     this.fogFar = FOG_FAR[parts.quality];
@@ -188,6 +202,51 @@ export class WorldSceneImpl implements WorldScene {
     await this.renderer.compileAsync(this.scene, cam);
   }
 
+  /**
+   * Fetch and add the close-up detail (roads, so far). Safe to call more than once; does nothing
+   * for a visitor who has asked their browser to save data. Failure is only a warning: the city is
+   * complete without it.
+   */
+  startDetail(): void {
+    if (this.detailAsked || !this.detailSource) return;
+    this.detailAsked = true;
+    if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return;
+    this.detailSource()
+      .then((d) => this.installDetail(d))
+      .catch((e: unknown) => console.warn('Close-up detail did not load:', e));
+  }
+
+  private async installDetail(d: DetailOutput): Promise<void> {
+    if (this.disposed || !d.ribbons || d.ribbons.indices.length === 0) return;
+    const data = d.ribbons;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
+    geometry.setAttribute('aAcross', new BufferAttribute(data.across, 1));
+    geometry.setAttribute('aAlong', new BufferAttribute(data.along, 1));
+    geometry.setAttribute('aHalf', new BufferAttribute(data.half, 1));
+    geometry.setAttribute('aInfo', new BufferAttribute(data.info, 4));
+    // Only the tiles near the camera are drawn: their triangles are copied to the front of this.
+    const index = new BufferAttribute(new Uint32Array(data.indices.length), 1);
+    index.setUsage(DynamicDrawUsage);
+    geometry.setIndex(index);
+    geometry.setDrawRange(0, 0);
+    const material = createRibbonMaterial(this.shared);
+    const mesh = new Mesh(geometry, material);
+    mesh.name = 'roads';
+    mesh.frustumCulled = false;
+    // Compile before it is shown, so its first frame costs nothing extra.
+    const cam = new PerspectiveCamera(60, 16 / 9, 0.5, 3500);
+    await this.renderer.compileAsync(mesh, cam, this.scene);
+    if (this.disposed) {
+      geometry.dispose();
+      material.dispose();
+      return;
+    }
+    this.disposables.push(geometry, material);
+    this.scene.add(mesh);
+    this.ribbons = { mesh, material, geometry, index, data, set: createNearSet(data.tiles), fade: 0 };
+  }
+
   add(object: Object3D): void {
     this.scene.add(object);
   }
@@ -218,6 +277,22 @@ export class WorldSceneImpl implements WorldScene {
       if (!s) continue;
       const d = Math.hypot(s.center.x - cp.x, s.center.y - cp.y, s.center.z - cp.z);
       m.visible = d - s.radius < this.fogFar;
+    }
+    // Roads: fade in once loaded, and keep only the tiles around the camera in the index buffer.
+    if (this.ribbons) {
+      const r = this.ribbons;
+      const radius = NEAR_RADIUS.roads * this.near;
+      r.fade = Math.min(1, r.fade + dt / 0.9);
+      r.material.uniforms.uDetail.value = r.fade;
+      r.material.uniforms.uRibbonR.value = radius;
+      r.mesh.visible = radius > 0;
+      if (r.set.update(cp.x, cp.z, radius)) {
+        const n = gatherIndices(r.data.indices, r.data.tileStart, r.set.tiles, r.index.array as Uint32Array);
+        r.geometry.setDrawRange(0, n);
+        r.index.clearUpdateRanges();
+        r.index.addUpdateRange(0, n);
+        r.index.needsUpdate = true;
+      }
     }
     // Rangitoto: scaled towards the camera so it sits inside the far plane at the same angular size.
     const base = this.rangitotoBase;
@@ -269,6 +344,7 @@ export class WorldSceneImpl implements WorldScene {
       this.shared.uFogNear.value = Math.round(d.fogFar * 0.1);
     }
     if (d.extraScale !== this.px.extraScale) this.shared.uResY.value = this.px.setExtraScale(d.extraScale).height;
+    this.near = d.near;
   }
 
   onContextChange(cb: (lost: boolean) => void): void {
@@ -295,6 +371,7 @@ export class WorldSceneImpl implements WorldScene {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
     this.scene.clear();

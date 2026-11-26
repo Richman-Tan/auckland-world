@@ -123,6 +123,48 @@ export function douglasPeucker(pts: ArrayLike<number>, eps: number): number[] {
   return out;
 }
 
+/** The parts of a polyline that lie inside a rectangle, cut exactly at its edge. */
+export function clipLine(line: ArrayLike<number>, minX: number, maxX: number, minZ: number, maxZ: number): number[][] {
+  const runs: number[][] = [];
+  let run: number[] = [];
+  const flush = () => {
+    if (run.length >= 4) runs.push(run);
+    run = [];
+  };
+  for (let i = 0; i + 3 < line.length; i += 2) {
+    const [x0, z0, x1, z1] = [line[i], line[i + 1], line[i + 2], line[i + 3]];
+    // Liang-Barsky: the stretch [t0, t1] of this segment that is inside.
+    let t0 = 0;
+    let t1 = 1;
+    const dx = x1 - x0;
+    const dz = z1 - z0;
+    let inside = true;
+    for (const [p, q] of [[-dx, x0 - minX], [dx, maxX - x0], [-dz, z0 - minZ], [dz, maxZ - z0]]) {
+      if (p === 0) {
+        if (q < 0) inside = false;
+      } else {
+        const t = q / p;
+        if (p < 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+      }
+    }
+    if (!inside || t0 > t1) {
+      flush();
+      continue;
+    }
+    const ax = x0 + dx * t0;
+    const az = z0 + dz * t0;
+    if (run.length === 0 || t0 > 0) {
+      flush();
+      run.push(ax, az);
+    }
+    run.push(x0 + dx * t1, z0 + dz * t1);
+    if (t1 < 1) flush();
+  }
+  flush();
+  return runs;
+}
+
 /** Douglas-Peucker for a closed ring: anchored at the first vertex and the vertex farthest from it. */
 export function simplifyRing(ring: ArrayLike<number>, eps: number): number[] {
   const n = ring.length / 2;

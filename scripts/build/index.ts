@@ -8,10 +8,11 @@ import { buildLandmarks } from './landmarks';
 import { buildPlaces } from './places';
 import { buildBuildings } from './buildings';
 import { buildGround } from './ground';
+import { buildRoads } from './roads';
 import { buildMinimap } from './minimap';
 import { buildMeta } from './meta';
 
-const ORDER = ['water', 'terrain', 'landmarks', 'places', 'buildings', 'ground', 'minimap', 'meta'] as const;
+const ORDER = ['water', 'terrain', 'landmarks', 'places', 'buildings', 'roads', 'ground', 'minimap', 'meta'] as const;
 type Stage = (typeof ORDER)[number];
 
 const arg = process.argv.find((a) => a.startsWith('--stage='));
@@ -40,6 +41,9 @@ for (const stage of ORDER) {
       break;
     case 'buildings':
       await buildBuildings();
+      break;
+    case 'roads':
+      await buildRoads();
       break;
     case 'ground':
       await buildGround();

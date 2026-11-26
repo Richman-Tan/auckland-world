@@ -77,6 +77,14 @@ export interface MapMeta {
     rangitoto: { x: number; z: number; summitY: number; baseRadius: number };
   };
   places: { name: string; kind: string; x: number; z: number }[];
+  /**
+   * Close-up detail, loaded after the city is first shown. Every part is optional: a map without
+   * one simply has less to see up close, and an older site ignores what it does not know.
+   */
+  detail?: {
+    /** Road and rail centre lines (roads.bin). */
+    roads?: { file: string; ways: number; vertices: number };
+  };
   files: Record<string, FileEntry>;
 }
 
@@ -469,4 +477,112 @@ export function ringSignedAreaNorthUp(ring: ArrayLike<number>, start = 0, end = 
     a += x1 * y2 - x2 * y1;
   }
   return a / 2;
+}
+
+/* --------------------------------------------------------------------- roads */
+
+/**
+ * roads.bin layout (little-endian, sections padded to 4 bytes):
+ *  0  char[4] "AWR1"   4 u16 version   6 u16 flags (0)
+ *  8  u32 W ways   12 u32 V vertices   16 f32 xzStep (m per unit)
+ *  S1 u8[W]  class (index into ROAD_CLASSES in ./roads)
+ *  S2 u8[W]  flags (bit 0 one-way, bit 1 bridge, bits 4-7 lanes, 0 = not recorded)
+ *  S3 u16[W] vertices per way
+ *  S4 i16[2V] (x, z) / xzStep: each way's first vertex absolute, then deltas from the previous vertex
+ * Ways are in painting order, minor roads first.
+ */
+export interface RoadWay {
+  cls: number;
+  flags: number;
+  /** x0, z0, x1, z1, ... in local metres; at least two vertices. */
+  line: ArrayLike<number>;
+}
+
+export interface RoadsData {
+  count: number;
+  vertexCount: number;
+  cls: Uint8Array;
+  flags: Uint8Array;
+  /** Index of each way's first vertex; one extra entry at the end holds vertexCount. */
+  wayStart: Uint32Array;
+  /** x, z per vertex, metres. */
+  xz: Float32Array;
+}
+
+export function encodeRoads(list: readonly RoadWay[]): Uint8Array {
+  let V = 0;
+  for (const r of list) {
+    const n = r.line.length / 2;
+    if (r.line.length % 2 || n < 2 || n > 65535) throw new Error('A road needs 2 to 65535 (x, z) vertices');
+    V += n;
+  }
+  const w = new Writer(32 + list.length * 4 + V * 4);
+  w.magic('AWR1');
+  w.u16(MAP_FORMAT_VERSION);
+  w.u16(0);
+  w.u32(list.length);
+  w.u32(V);
+  w.f32(XZ_STEP);
+  for (const r of list) w.u8v(r.cls & 0xff);
+  w.pad4();
+  for (const r of list) w.u8v(r.flags & 0xff);
+  w.pad4();
+  for (const r of list) w.u16(r.line.length / 2);
+  w.pad4();
+  for (const r of list) {
+    let px = 0;
+    let pz = 0;
+    for (let i = 0; i < r.line.length; i += 2) {
+      const qx = toI16(r.line[i] / XZ_STEP);
+      const qz = toI16(r.line[i + 1] / XZ_STEP);
+      w.i16(i === 0 ? qx : toI16(qx - px));
+      w.i16(i === 0 ? qz : toI16(qz - pz));
+      px = qx;
+      pz = qz;
+    }
+  }
+  w.pad4();
+  return w.bytes();
+}
+
+export function decodeRoads(bytes: Uint8Array): RoadsData {
+  const r = new Reader(bytes);
+  r.check(20);
+  r.magic('AWR1');
+  const version = r.u16();
+  if (version !== MAP_FORMAT_VERSION) throw new Error(`roads.bin version ${version} unsupported`);
+  r.u16();
+  const W = r.u32();
+  const V = r.u32();
+  const step = r.f32();
+  r.check(W * 4 + V * 4);
+  const cls = new Uint8Array(W);
+  for (let i = 0; i < W; i++) cls[i] = r.u8v();
+  r.pad4();
+  const flags = new Uint8Array(W);
+  for (let i = 0; i < W; i++) flags[i] = r.u8v();
+  r.pad4();
+  const wayStart = new Uint32Array(W + 1);
+  let total = 0;
+  for (let i = 0; i < W; i++) {
+    wayStart[i] = total;
+    total += r.u16();
+  }
+  wayStart[W] = total;
+  if (total !== V) throw new Error('roads.bin: vertex counts do not add up');
+  r.pad4();
+  const xz = new Float32Array(V * 2);
+  for (let i = 0; i < W; i++) {
+    let px = 0;
+    let pz = 0;
+    for (let v = wayStart[i]; v < wayStart[i + 1]; v++) {
+      const dx = r.i16();
+      const dz = r.i16();
+      px = v === wayStart[i] ? dx : px + dx;
+      pz = v === wayStart[i] ? dz : pz + dz;
+      xz[v * 2] = px * step;
+      xz[v * 2 + 1] = pz * step;
+    }
+  }
+  return { count: W, vertexCount: V, cls, flags, wayStart, xz };
 }

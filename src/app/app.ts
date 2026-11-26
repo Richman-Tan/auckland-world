@@ -893,6 +893,8 @@ export function startApp(): void {
       // let the boot scene give way to it.
       revealedAt = time;
       void ui.reveal();
+      // Now that there is something to look at, fetch what makes it hold up close.
+      l.world.startDetail();
     }
 
     // Telemetry

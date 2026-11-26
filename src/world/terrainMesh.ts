@@ -68,6 +68,37 @@ export function buildTerrainMesh(t: TerrainGrid, bounds: Bounds, stride = 1, wat
   return { positions, uvs, indices: all.slice(0, k) };
 }
 
+/**
+ * The height of the terrain mesh itself at (x, z): the surface buildTerrainMesh draws, triangle by
+ * triangle, at the same `stride`. A bilinear sample of the grid (sampleTerrain) is not this: each
+ * cell is two flat triangles whose shared diagonal alternates from cell to cell, and on a twisted
+ * cell the two can differ by metres. Anything that must lie on the ground (road ribbons) uses this.
+ */
+export function sampleTerrainMesh(t: TerrainGrid, x: number, z: number, stride = 1): number {
+  const cellsX = Math.ceil((t.cols - 1) / stride);
+  const cellsZ = Math.ceil((t.rows - 1) / stride);
+  const fx = Math.min(Math.max((x - t.x0) / t.cell, 0), t.cols - 1);
+  const fz = Math.min(Math.max((z - t.z0) / t.cell, 0), t.rows - 1);
+  const i = Math.min(Math.floor(fx / stride), cellsX - 1);
+  const j = Math.min(Math.floor(fz / stride), cellsZ - 1);
+  const c0 = i * stride;
+  const c1 = Math.min(c0 + stride, t.cols - 1);
+  const r0 = j * stride;
+  const r1 = Math.min(r0 + stride, t.rows - 1);
+  const u = (fx - c0) / (c1 - c0);
+  const v = (fz - r0) / (r1 - r0);
+  const h00 = t.heights[r0 * t.cols + c0];
+  const h10 = t.heights[r0 * t.cols + c1];
+  const h01 = t.heights[r1 * t.cols + c0];
+  const h11 = t.heights[r1 * t.cols + c1];
+  if (((i + j) & 1) === 0) {
+    // Diagonal from the east corner of the north edge to the west corner of the south edge.
+    return u + v <= 1 ? h00 + (h10 - h00) * u + (h01 - h00) * v : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+  }
+  // Diagonal from the north-west corner to the south-east one.
+  return v >= u ? h00 + (h11 - h01) * u + (h01 - h00) * v : h00 + (h10 - h00) * u + (h11 - h10) * v;
+}
+
 export const OUTSKIRTS_MARGIN = 4000;
 export const OUTSKIRTS_DECAY = 1500;
 export const OUTSKIRTS_CELL = 100;

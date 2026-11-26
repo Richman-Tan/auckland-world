@@ -233,6 +233,11 @@ export interface WorldScene {
    * it and writes its own position into it, so the world can draw the plane's shadow.
    */
   readonly lighting: SharedUniforms;
+  /**
+   * Fetch and add the close-up detail (road markings and the like). Call it once the city has been
+   * shown: it loads in the background and fades in, and the world is complete without it.
+   */
+  startDetail(): void;
   /** Add an object (the plane) to the scene. */
   add(object: Object3D): void;
   setStops(stops: StopPlacement[]): void;

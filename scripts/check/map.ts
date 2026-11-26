@@ -7,6 +7,7 @@ import { content } from '../../src/content';
 import { placeStops } from '../../src/app/placement';
 import {
   decodeBuildings,
+  decodeRoads,
   decodeTerrain,
   isMapMeta,
   latLonToLocal,
@@ -51,6 +52,36 @@ check('buildings budget', size(meta.buildings.file) <= 900 * 1024, kb(size(meta.
 check('ground budget', size(meta.ground.file) <= 1.1 * 1048576, kb(size(meta.ground.file)));
 check('terrain budget', size(meta.terrain.file) <= 200 * 1024, kb(size(meta.terrain.file)));
 check('minimap budget', size(meta.minimap.file) <= 100 * 1024, kb(size(meta.minimap.file)));
+// What has to arrive before the city is first shown. Close-up detail loads after that, so it may
+// grow the total but never this.
+const firstReveal = size(meta.terrain.file) + size(meta.buildings.file) + size(meta.ground.file);
+check('first reveal budget', firstReveal <= 1.8 * 1e6, `${(firstReveal / 1e6).toFixed(2)} MB of 1.80 MB (terrain, buildings, ground)`);
+
+/* ---- close-up detail */
+if (meta.detail?.roads) {
+  const r = meta.detail.roads;
+  check('roads budget', size(r.file) <= 170 * 1024, kb(size(r.file)));
+  const roads = decodeRoads(new Uint8Array(gunzipSync(readFileSync(resolve(PUBLIC_MAP_DIR, r.file)))));
+  check('road counts match meta', roads.count === r.ways && roads.vertexCount === r.vertices, `${roads.count} ways / ${roads.vertexCount} vertices`);
+  let km = 0;
+  let out = 0;
+  let longest = 0;
+  for (let w = 0; w < roads.count; w++) {
+    for (let v = roads.wayStart[w]; v < roads.wayStart[w + 1]; v++) {
+      const x = roads.xz[v * 2];
+      const z = roads.xz[v * 2 + 1];
+      if (x < meta.bounds.minX || x > meta.bounds.maxX || z < meta.bounds.minZ || z > meta.bounds.maxZ) out++;
+      if (v > roads.wayStart[w]) {
+        const d = Math.hypot(x - roads.xz[v * 2 - 2], z - roads.xz[v * 2 - 1]);
+        km += d / 1000;
+        longest = Math.max(longest, d);
+      }
+    }
+  }
+  check('road network length', within(km, 400, 1400), `${km.toFixed(0)} km`);
+  check('roads inside bounds', out === 0, `${out} vertices outside`);
+  check('no absurd road segment', longest < 1500, `longest segment ${longest.toFixed(0)} m`);
+}
 
 /* ---- buildings */
 const unz = (f: string) => new Uint8Array(gunzipSync(readFileSync(resolve(PUBLIC_MAP_DIR, f))));

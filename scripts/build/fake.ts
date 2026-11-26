@@ -12,12 +12,15 @@ import {
   type BuildingRecord,
   type FileEntry,
   type MapMeta,
+  type RoadWay,
   MAP_FORMAT_VERSION,
   type TerrainGrid,
+  encodeRoads,
   encodeBuildings,
   encodeTerrain,
   sampleTerrain,
 } from '../../src/shared/mapFormat';
+import { ROAD_CLASSES, roadFlags } from '../../src/shared/roads';
 import { GROUND, makeStyle } from '../../src/shared/palette';
 import {
   ATTRIBUTION,
@@ -31,6 +34,7 @@ import {
   WORLD,
 } from '../config';
 import { fitGeo, lonLatToLocal, localToLonLat, trueNorthAngleRad } from '../lib/geo';
+import { clipLine } from '../lib/geom';
 import { writeFile, writeGz } from '../lib/io';
 
 /* Deterministic random. */
@@ -255,6 +259,25 @@ const mmMpp = (BOUNDS.maxX - BOUNDS.minX) / MINIMAP_WIDTH;
 const minimap = drawGround(mmMpp, true, false);
 files['minimap.webp'] = writeFile(resolve(out, 'minimap.webp'), await minimap.canvas.encode('webp', 85));
 
+// Close-up detail: the same loose grid of roads the ground image shows, as centre lines.
+const RESIDENTIAL = ROAD_CLASSES.indexOf('residential');
+const SECONDARY = ROAD_CLASSES.indexOf('secondary');
+const fakeRoads: RoadWay[] = [];
+const fakeRoad = (line: number[], n: number) => {
+  // Every fourth road is a main one, so both kinds of marking can be seen.
+  const main = n % 4 === 0;
+  for (const part of clipLine(line, BOUNDS.minX + 1, BOUNDS.maxX - 1, BOUNDS.minZ + 1, BOUNDS.maxZ - 1)) {
+    fakeRoads.push({ cls: main ? SECONDARY : RESIDENTIAL, flags: roadFlags(main ? 2 : 0, false, false), line: part });
+  }
+};
+let roadNo = 0;
+for (let x = BOUNDS.minX; x < BOUNDS.maxX; x += 280) fakeRoad([x, BOUNDS.minZ, x + 120, BOUNDS.maxZ], roadNo++);
+for (let z = BOUNDS.minZ; z < BOUNDS.maxZ; z += 240) fakeRoad([BOUNDS.minX, z, BOUNDS.maxX, z + 90], roadNo++);
+// Minor before major: the order they are painted in.
+fakeRoads.sort((a, b) => a.cls - b.cls);
+files['roads.bin.gz'] = writeGz(resolve(out, 'roads.bin.gz'), encodeRoads(fakeRoads));
+const fakeRoadVertices = fakeRoads.reduce((n, r) => n + r.line.length / 2, 0);
+
 let minH = Infinity;
 let maxH = -Infinity;
 for (const v of heights) {
@@ -313,6 +336,7 @@ const meta: MapMeta = {
     ['Northcote Point', -36.8205, 174.7465],
     ['Devonport', -36.829, 174.795],
   ].map(([name, lat, lon]) => ({ name: name as string, kind: 'suburb', ...lonLatToLocal(lon as number, lat as number) })),
+  detail: { roads: { file: 'roads.bin.gz', ways: fakeRoads.length, vertices: fakeRoadVertices } },
   files,
 };
 

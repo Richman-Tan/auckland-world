@@ -403,6 +403,139 @@ void main() {
   );
 }
 
+/* ------------------------------------------------------------------- roads */
+
+/**
+ * Road ribbons (world/ribbons.ts). The mesh is a plain strip; everything that makes it a road is
+ * painted here from two numbers on each vertex, how far across the road it is and how far along:
+ * the seal with its patches, the kerb and footpath, edge lines, the centre line and lane dashes,
+ * rail with its sleepers, and at night the pools of light under the lamps of main roads.
+ *
+ * Only what is near the camera is drawn (uRibbonR, with a dithered edge); beyond that the roads
+ * painted into the ground image take over. Painted lines are drawn by how much of a pixel they
+ * cover and are dropped once a pixel is wider than a lane marking can survive, so nothing sparkles.
+ */
+export function createRibbonMaterial(shared: SharedUniforms): ShaderMaterial {
+  return make(
+    shared,
+    /* glsl */ `
+in float aAcross;
+in float aAlong;
+in float aHalf;
+in vec4 aInfo;
+out vec3 vWorld;
+out float vAcross;
+out float vAlong;
+out float vHalf;
+flat out vec4 vInfo;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorld = wp.xyz;
+  vAcross = aAcross;
+  vAlong = aAlong;
+  vHalf = aHalf;
+  vInfo = aInfo;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    /* glsl */ `
+in vec3 vWorld;
+in float vAcross;
+in float vAlong;
+in float vHalf;
+flat in vec4 vInfo;
+uniform float uRibbonR;
+uniform float uDetail;
+const float LANE = 3.3;
+
+// How much of a pixel a painted line covers: half-width w, d metres from its centre, px metres a pixel.
+float painted(float d, float w, float px) {
+  return min(clamp((w + 0.5 * px - abs(d)) / px, 0.0, 1.0), min(1.0, 2.0 * w / px));
+}
+// A repeating pattern fades to nothing as its period shrinks towards a pixel.
+float keep(float px, float period) {
+  return 1.0 - smoothstep(0.22, 0.5, px / period);
+}
+
+void main() {
+  float dist = length(vWorld - cameraPosition);
+  float dither = bayer4(gl_FragCoord.xy);
+  float gate = uDetail * (1.0 - smoothstep(0.72 * uRibbonR, uRibbonR, dist));
+  if (gate <= dither) discard;
+
+  int cls = int(vInfo.x + 0.5);
+  float lanes = vInfo.y;
+  int flags = int(vInfo.z + 0.5);
+  bool oneway = (flags & 1) != 0;
+  bool marked = (flags & 2) != 0;
+  float path = vInfo.w * 0.1;
+  float a = abs(vAcross);
+  float pxA = max(fwidth(vAcross), 0.0001);
+  float pxL = max(fwidth(vAlong), 0.0001);
+  // Markings are 10 to 25 cm wide: past this they are gone, not a scatter of dots.
+  float fine = 1.0 - smoothstep(0.3, 0.7, pxA);
+
+  vec3 c;
+  float line = 0.0;
+  vec3 paint = vec3(0.9, 0.89, 0.84);
+  if (cls == 15) {
+    // Rail: ballast, sleepers, and the two rails.
+    c = vec3(0.45, 0.42, 0.38);
+    float sleeper = step(0.55, fract(vAlong / 1.5)) * step(a, 1.3);
+    c *= 1.0 - 0.28 * sleeper * keep(pxL, 1.5);
+    line = painted(a - 0.72, 0.1, pxA) * fine;
+    paint = vec3(0.66, 0.67, 0.7);
+  } else {
+    // Seal: newer on motorways, greyer on back streets, in patches a lane wide and a few metres long.
+    c = cls >= 13 ? vec3(0.4, 0.37, 0.36) : (cls >= 8 ? vec3(0.32, 0.32, 0.35) : (cls <= 1 ? vec3(0.43, 0.42, 0.42) : vec3(0.36, 0.36, 0.39)));
+    float worn = hash21(floor(vec2(vAlong / 6.0, (vAcross + 60.0) / LANE)) + vInfo.xy);
+    c *= 1.0 + (worn - 0.5) * 0.1 * keep(pxL, 6.0);
+    if (path > 0.0) {
+      if (a > vHalf) {
+        // Footpath: pale concrete with a joint every two metres.
+        float joint = step(fract(vAlong / 2.0), 0.1) * keep(pxL, 2.0);
+        c = vec3(0.7, 0.68, 0.63) * (1.0 - 0.14 * joint);
+      }
+      // The kerb between them.
+      float kerb = painted(a - vHalf, 0.14, pxA) * (1.0 - smoothstep(0.5, 1.4, pxA));
+      c = mix(c, vec3(0.82, 0.81, 0.76), kerb);
+    }
+    if (marked) {
+      // Edge lines on main roads.
+      if (cls >= 8) line = painted(a - (vHalf - 0.45), 0.1, pxA);
+      // Lane boundaries sit every lane-width across; with an even number of lanes one is the centre.
+      float even = 1.0 - mod(lanes, 2.0);
+      float shift = even > 0.5 ? 0.0 : LANE * 0.5;
+      float d = abs(mod(a + shift + LANE * 0.5, LANE) - LANE * 0.5);
+      float dash = mix(0.3, step(fract(vAlong / 10.0), 0.3), keep(pxL, 10.0));
+      if (a < vHalf - 1.2) {
+        float on = painted(d, 0.12, pxA);
+        bool centre = !oneway && even > 0.5 && a < LANE * 0.5;
+        if (centre) on *= cls >= 6 ? (lanes > 3.5 ? 1.0 : dash) : 0.0;
+        else on *= (lanes > 2.5 || (oneway && lanes > 1.5)) ? dash : 0.0;
+        line = max(line, on);
+      }
+      line *= fine;
+    }
+  }
+  c = mix(c, paint, step(dither, line * 0.999));
+
+  vec3 n = flatNormal(vWorld);
+  c *= mix(uAmbient, lambert3(n), 0.45);
+  if (cls >= 8 && cls != 15) {
+    // Street lamps: a warm pool every forty metres, alternate sides.
+    float along = mod(vAlong, 40.0) - 20.0;
+    float side = mod(floor(vAlong / 40.0), 2.0) < 0.5 ? 1.0 : -1.0;
+    float pool = (1.0 - smoothstep(3.0, 15.0, length(vec2(along, vAcross - side * vHalf * 0.6))));
+    c = mix(c, c * vec3(2.6, 2.1, 1.3) + vec3(0.05, 0.035, 0.01), pool * uNight * 0.85);
+  }
+  c *= planeShadow(vWorld);
+  outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
+}`,
+    { uRibbonR: { value: 0 }, uDetail: { value: 0 } },
+    { side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 },
+  );
+}
+
 /* ------------------------------------------------------------------- plane */
 
 /**

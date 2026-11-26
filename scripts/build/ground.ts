@@ -54,7 +54,7 @@ export function areaFeatures(): AreaFeature[] {
   return out;
 }
 
-export interface Road { cls: string; width: number; line: number[]; bridge: boolean }
+export interface Road { cls: string; width: number; line: number[]; bridge: boolean; lanes: number; oneway: boolean }
 const ROAD_W: Record<string, number> = {
   motorway: 18, motorway_link: 9, trunk: 14, trunk_link: 8, primary: 12, primary_link: 7, secondary: 10, secondary_link: 6,
   tertiary: 9, tertiary_link: 6, residential: 7, unclassified: 7, living_street: 6, service: 4, road: 6,
@@ -73,7 +73,10 @@ export function transport() {
     const line: number[] = [];
     for (const p of el.geometry) if (p) line.push(...localOf(p));
     if (t.highway && ROAD_W[t.highway] !== undefined && t.area !== 'yes') {
-      roads.push({ cls: t.highway, width: ROAD_W[t.highway], line, bridge: t.bridge === 'yes' });
+      // Lanes and direction are not painted, but the road layer (roads.ts) ships them.
+      const lanes = Math.floor(Number(t.lanes));
+      const oneway = t.oneway === 'yes' || t.oneway === '-1' || (t.highway === 'motorway' && t.oneway !== 'no') || t.junction === 'roundabout';
+      roads.push({ cls: t.highway, width: ROAD_W[t.highway], line, bridge: t.bridge === 'yes', lanes: lanes > 0 && lanes < 16 ? lanes : 0, oneway });
     } else if (t.railway && ['rail', 'light_rail', 'subway'].includes(t.railway)) {
       rails.push(line);
     }

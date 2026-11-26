@@ -88,6 +88,7 @@ async function main() {
     onProgress: (p) => (msg.textContent = `${p.label} ${(p.loadedBytes / 1024).toFixed(0)} / ${(p.totalBytes / 1024).toFixed(0)} KB`),
   });
   const loadMs = performance.now() - t0;
+  world.startDetail();
   msg.textContent = '';
   stage.appendChild(canvas);
   const stops = placeStops(content, world.meta, world.query.groundAt);

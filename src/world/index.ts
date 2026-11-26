@@ -8,6 +8,7 @@ import type { LoadWorld, LoadWorldOptions, WorldScene } from '../app/contracts';
 import { WorldSceneImpl } from '../render/worldScene';
 import { createWorldQuery, landmarkColliders } from '../shared/collision';
 import type { BuildOutput } from './buildWorld';
+import { loadDetail } from './detail';
 import type { WorkerRequest, WorkerResponse } from './geometry.worker';
 import { ProgressTracker, fetchBytes, fetchMeta } from './loader';
 
@@ -19,12 +20,13 @@ function runWorker(req: WorkerRequest): Promise<BuildOutput> {
     worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
       worker.terminate();
       if (ev.data.type === 'done') resolve(ev.data.output);
-      else reject(new Error(`geometry worker: ${ev.data.message}`));
+      else reject(new Error(ev.data.type === 'error' ? `geometry worker: ${ev.data.message}` : 'geometry worker: unexpected reply'));
     };
     worker.onerror = (ev) => {
       worker.terminate();
       reject(new Error(`geometry worker failed: ${ev.message}`));
     };
+    if (req.type !== 'build') throw new Error('runWorker only builds the world');
     worker.postMessage(req, [req.input.terrain.buffer, req.input.buildings.buffer]);
   });
 }
@@ -75,7 +77,16 @@ export const loadWorld: LoadWorld = async (opts: LoadWorldOptions): Promise<Worl
   });
 
   const query = createWorldQuery(built.terrain, built.grid, landmarkColliders(meta), meta.bounds, meta.water.level);
-  const world = new WorldSceneImpl({ canvas: opts.canvas, meta, query, quality: opts.quality, ground, built });
+  const world = new WorldSceneImpl({
+    canvas: opts.canvas,
+    meta,
+    query,
+    quality: opts.quality,
+    ground,
+    built,
+    // Asked for by WorldScene.startDetail, once the city has been shown.
+    detail: () => loadDetail(base, meta, built.terrain, opts.quality),
+  });
   progress.enter('compile', 'Compiling shaders');
   await world.warmUp();
   return world;
