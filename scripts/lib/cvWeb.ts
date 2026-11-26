@@ -5,7 +5,10 @@
  *   1. the phone number comes off the contact line;
  *   2. the status row under it (citizenship, work rights, relocation, availability) is dropped;
  *   3. the Sandfield bullets are replaced with the site's own capability-level wording, because
- *      the site names no metrics, products or internal projects (see src/content/rules.ts).
+ *      the site names no metrics, products, clients or internal projects (see src/content/rules.ts).
+ *      The CV may list more than one role there, each with its own bullets; the copy keeps every
+ *      role's title and dates under the one heading and puts the site's wording beneath them all,
+ *      since the site describes the time there as a whole.
  *
  * The edits are best effort: a CV whose layout has changed may slip past them. publicCvProblems is
  * the real guard. It reads the finished PDF's text and names anything that should not be there;
@@ -54,16 +57,42 @@ export function webCopyTex(source: string, sandfieldItems: readonly string[]): W
     notes.push('no status row found under the contact line');
   }
 
-  // 3. Sandfield: swap the bullets under its heading for the site's wording.
+  // 3. Sandfield: swap every bullet under its heading for the site's wording. The entry runs from
+  // its heading to the next employer's (or the end of the list of employers).
   const heading = tex.indexOf('{Sandfield}');
   if (heading < 0) throw new Error('cv: no {Sandfield} heading found');
-  const start = tex.indexOf('\\resumeItemListStart', heading);
-  const end = tex.indexOf('\\resumeItemListEnd', start);
-  if (start < 0 || end < 0) throw new Error('cv: no bullet list found under the Sandfield heading');
-  const before = (tex.slice(start, end).match(/\\resumeItem\b/g) ?? []).length;
+  const after = tex.slice(heading);
+  const next = /\\resumeSubheading(?:TwoRoles)?\b|\\resumeSubHeadingListEnd\b/.exec(after);
+  const entryEnd = next ? heading + next.index : tex.length;
+  const entry = tex.slice(heading, entryEnd);
+  const lists = [...entry.matchAll(/\\resumeItemListStart[\s\S]*?\\resumeItemListEnd/g)];
+  if (lists.length === 0) throw new Error('cv: no bullet list found under the Sandfield heading');
+  const before = lists.reduce((n, l) => n + (l[0].match(/\\resumeItem\b/g) ?? []).length, 0);
+  // Earlier roles at the same employer, each written as a title and dates above its own bullets.
+  const roles = [...entry.matchAll(/\\resumeRole\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g)].map((m) => ({ title: m[1], dates: m[2] }));
+  const first = lists[0].index;
+  const last = lists[lists.length - 1];
+  let head = entry.slice(0, first);
+  const tail = entry.slice(last.index + last[0].length);
+  let extra = '';
+  const macro = tex.lastIndexOf('\\resumeSubheading', heading);
+  const plain = macro >= 0 && /^\\resumeSubheading\s*$/.test(tex.slice(macro, heading));
+  if (roles.length === 1 && plain && tex.includes('\\newcommand{\\resumeSubheadingTwoRoles}')) {
+    // The CV has a heading for exactly this: one employer, both titles and dates.
+    tex = `${tex.slice(0, macro)}\\resumeSubheadingTwoRoles${tex.slice(macro + '\\resumeSubheading'.length)}`;
+    head = `${head.trimEnd()}\n    {${roles[0].title}}{${roles[0].dates}}\n    `;
+    notes.push(`put both Sandfield roles under one heading (${roles[0].title}, ${roles[0].dates})`);
+  } else if (roles.length > 0) {
+    extra = roles.map((r) => `  \\resumeRole\n    {${r.title}}{${r.dates}}\n`).join('');
+    head = `${head.trimEnd()}\n`;
+    notes.push(`kept ${roles.length} earlier Sandfield role(s) as title and dates`);
+  }
+  // (Renaming the heading moved the entry along, so it is found again.)
+  const at = tex.indexOf('{Sandfield}');
   const items = sandfieldItems.map((i) => `      \\resumeItem{}\n        {${latexFromInline(i)}}\n`).join('');
-  tex = `${tex.slice(0, start)}\\resumeItemListStart\n${items}    ${tex.slice(end)}`;
-  notes.push(`replaced ${before} Sandfield bullet(s) with the site's ${sandfieldItems.length}`);
+  const list = `\\resumeItemListStart\n${items}    \\resumeItemListEnd`;
+  tex = `${tex.slice(0, at)}${head}${extra}${extra ? '    ' : ''}${list}${tail}${tex.slice(at + entry.length)}`;
+  notes.push(`replaced ${before} Sandfield bullet(s) in ${lists.length} list(s) with the site's ${sandfieldItems.length}`);
 
   return { tex, notes };
 }

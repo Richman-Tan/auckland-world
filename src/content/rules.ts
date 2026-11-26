@@ -19,4 +19,8 @@ export const SANDFIELD_DENY: readonly string[] = [
   '1,000+ security alerts',
   '100+ repositories',
   '10+ REST APIs',
+  // Client work: who it is for and how big they are.
+  'freight management',
+  '10,000+ staff',
+  '10,000+ downloads',
 ];

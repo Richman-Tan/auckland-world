@@ -210,7 +210,7 @@ The "CV" link serves `public/Richman-Tan-CV.pdf`. It is not the CV sent to emplo
 
 - the phone number;
 - the status row under the contact line (citizenship, work rights, relocation, availability);
-- the Sandfield bullets, which are replaced by the wording on the site's own Sandfield page, because the site names no figures, products or internal projects there (`src/content/rules.ts`).
+- the Sandfield bullets, which are replaced by the wording on the site's own Sandfield page, because the site names no figures, products, clients or internal projects there (`src/content/rules.ts`). Where the CV lists two roles there, each with its own bullets, the copy keeps both titles and dates under the one heading and puts the site's wording beneath.
 
 The script then reads the finished PDF back and refuses to publish it if any of those is still in it, or if it runs past one page. `tests/cv.test.ts` makes the same checks on the committed file, so a CV copied into `public/` by hand fails the build.
 

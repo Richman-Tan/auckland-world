@@ -69,6 +69,54 @@ describe('the public copy of the CV: building it', () => {
     expect(notes.join(' ')).toMatch(/replaced 2 Sandfield bullet/);
   });
 
+  describe('when the CV lists two roles there, each with its own bullets', () => {
+    // The layout the CV moved to: the current role and its bullets, then the earlier role and its own.
+    const twoLists = (withMacro: boolean) =>
+      (withMacro ? String.raw`\newcommand{\resumeSubheadingTwoRoles}[6]{}` : '') +
+      SAMPLE.replace(
+        /\\resumeSubheadingTwoRoles[\s\S]*?\\resumeItemListEnd/,
+        String.raw`\resumeSubheading
+    {Sandfield}{Auckland, New Zealand}
+    {Software Developer}{Nov 2026 - Present}
+    \resumeItemListStart
+      \resumeItem{}
+        {Upgraded the freight management system of a company with \textbf{10,000+ staff}.}
+    \resumeItemListEnd
+  \resumeRole
+    {Software Engineering Intern}{Nov 2025 - Oct 2026}
+    \resumeItemListStart
+      \resumeItem{}
+        {Built a secret thing used by \textbf{200+ engineers}.}
+      \resumeItem{}
+        {Handled \textbf{1,000+ security alerts} a week.}
+    \resumeItemListEnd`,
+      );
+
+    it('replaces the bullets of both, and puts both roles under the one heading', () => {
+      const out = webCopyTex(twoLists(true), ['Built tools in **C#/.NET** & more.']);
+      for (const gone of ['200+ engineers', '1,000+ security alerts', '10,000+ staff', 'freight management']) expect(out.tex).not.toContain(gone);
+      expect(out.tex).toContain(String.raw`{Built tools in \textbf{C\#/.NET} \& more.}`);
+      // One heading carrying both titles and dates, and one list beneath it.
+      expect(out.tex).toMatch(/\\resumeSubheadingTwoRoles\s*\{Sandfield\}\{Auckland, New Zealand\}\s*\{Software Developer\}\{Nov 2026 - Present\}\s*\{Software Engineering Intern\}\{Nov 2025 - Oct 2026\}\s*\\resumeItemListStart/);
+      expect(out.tex).not.toContain(String.raw`\resumeRole`);
+      // Sandfield's one list and the next employer's.
+      expect(out.tex.match(/\\resumeItemListStart/g)).toHaveLength(2);
+      expect(out.tex.match(/\\resumeItemListEnd/g)).toHaveLength(2);
+      expect(out.tex).toContain('{Kept this bullet.}');
+      expect(out.tex).toMatch(/\\resumeSubheading\s*\{Another Place\}/);
+      expect(out.notes.join(' ')).toMatch(/replaced 3 Sandfield bullet\(s\) in 2 list\(s\)/);
+      expect(out.notes.join(' ')).toMatch(/both Sandfield roles under one heading/);
+    });
+
+    it('keeps the earlier role as a title and dates when the CV has no heading for two', () => {
+      const out = webCopyTex(twoLists(false), ['One line.']);
+      expect(out.tex).not.toContain('200+ engineers');
+      expect(out.tex).toMatch(/\{Software Developer\}\{Nov 2026 - Present\}\s*\\resumeRole\s*\{Software Engineering Intern\}\{Nov 2025 - Oct 2026\}\s*\\resumeItemListStart\s*\\resumeItem\{\}\s*\{One line\.\}/);
+      expect(out.tex.match(/\\resumeItemListStart/g)).toHaveLength(2);
+      expect(out.tex).toContain('{Kept this bullet.}');
+    });
+  });
+
   it('escapes LaTeX specials in site copy', () => {
     expect(latexFromInline('50% of A&B_C #1 {x} $5 ~ ^')).toBe(String.raw`50\% of A\&B\_C \#1 \{x\} \$5 \~{} \^{}`);
     expect(latexFromInline('**bold** and plain')).toBe(String.raw`\textbf{bold} and plain`);
