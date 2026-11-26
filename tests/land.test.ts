@@ -246,7 +246,9 @@ describe('the land grid on the fake map', () => {
     expect([img.width, img.height, img.cell]).toEqual([land.width, land.height, land.cell]);
     expect(img.pixels.length).toBe(land.width * land.height * 2);
     expect(Array.from(img.pixels.subarray(0, 200))).toEqual(Array.from(landTexture(land).subarray(0, 200)));
-    expect(detailTransferables(out)).toEqual([img.pixels.buffer]);
+    // Handed over without a copy, along with the trees that are stood from the same grid.
+    expect(detailTransferables(out)).toContain(img.pixels.buffer);
+    expect(out.trees).toBeDefined();
   });
 });
 

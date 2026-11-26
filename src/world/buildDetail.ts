@@ -7,6 +7,7 @@ import { type Bounds, type MapMeta, type TerrainGrid, decodeLand, decodeRoads } 
 import type { QualityTier } from '../shared/detail';
 import { inflateIfGzip } from './buildWorld';
 import { type RibbonMesh, bridgeStrips, buildRibbons, ribbonTransferables } from './ribbons';
+import { type TreeField, scatterTrees, treeTransferables } from './trees';
 import { sampleTerrainMesh } from './terrainMesh';
 
 export interface DetailInput {
@@ -16,6 +17,8 @@ export interface DetailInput {
   land?: Uint8Array;
   /** The Harbour Bridge as measured, so its deck gets its lanes along with the roads. */
   bridge?: MapMeta['landmarks']['harbourBridge'];
+  /** Sea level: nothing is planted at or below it. */
+  waterLevel?: number;
   terrain: TerrainGrid;
   bounds: Bounds;
   quality: QualityTier;
@@ -32,6 +35,8 @@ export interface LandImage {
 export interface DetailOutput {
   ribbons?: RibbonMesh;
   land?: LandImage;
+  /** Trees, stood wherever the land grid says there is canopy. */
+  trees?: TreeField;
 }
 
 export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
@@ -50,6 +55,7 @@ export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
   if (input.land) {
     const grid = decodeLand(await inflateIfGzip(input.land));
     out.land = { width: grid.width, height: grid.height, cell: grid.cell, pixels: landTexture(grid) };
+    out.trees = scatterTrees(grid, input.bounds, heightAt, { waterLevel: input.waterLevel ?? 0 });
   }
   return out;
 }
@@ -57,5 +63,6 @@ export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
 export function detailTransferables(out: DetailOutput): ArrayBuffer[] {
   const list = out.ribbons ? ribbonTransferables(out.ribbons) : [];
   if (out.land) list.push(out.land.pixels.buffer as ArrayBuffer);
+  if (out.trees) list.push(...treeTransferables(out.trees));
   return list;
 }

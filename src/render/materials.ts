@@ -751,6 +751,71 @@ void main() {
   );
 }
 
+/* ------------------------------------------------------------------- trees */
+
+/**
+ * Trees (world/trees.ts): one mesh per species, drawn once for every tree near the camera. Each
+ * instance is a place, a height and the tree's own number; the vertex stage stands the unit tree
+ * there, as tall as that, turned and widened a little by its number. Crowns are lit in the same
+ * three steps as everything else. `bloom` (pohutukawa only) scatters crimson over the crown.
+ */
+export function createTreeMaterial(shared: SharedUniforms, crown: string, bloom = 0): ShaderMaterial {
+  return make(
+    shared,
+    /* glsl */ `
+in float aTone;
+in vec4 aTree;
+in float aSeed;
+out vec3 vWorld;
+out vec3 vLocal;
+out float vTone;
+flat out float vSeed;
+void main() {
+  float s = aSeed / 255.0;
+  float a = s * 6.2832;
+  float wide = aTree.w * (0.85 + 0.3 * fract(s * 7.31));
+  vec3 p = vec3(position.x * cos(a) - position.z * sin(a), position.y, position.x * sin(a) + position.z * cos(a));
+  vLocal = vec3(p.x * wide, p.y * aTree.w, p.z * wide);
+  vec4 wp = modelMatrix * vec4(aTree.xyz + vLocal, 1.0);
+  vWorld = wp.xyz;
+  vTone = aTone;
+  vSeed = aSeed;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    /* glsl */ `
+in vec3 vWorld;
+in vec3 vLocal;
+in float vTone;
+flat in float vSeed;
+uniform vec3 uCrown;
+uniform float uBloom;
+uniform float uTreeR;
+uniform float uDetail;
+void main() {
+  float dist = length(vWorld - cameraPosition);
+  // They come in through a dither at the edge of their reach, not all at once.
+  float gate = uDetail * (1.0 - smoothstep(0.8 * uTreeR, uTreeR, dist));
+  if (gate <= bayer4(gl_FragCoord.xy)) discard;
+  vec3 n = flatNormal(vWorld);
+  vec3 c;
+  if (vTone < 0.01) {
+    c = vec3(0.36, 0.27, 0.2);
+  } else {
+    // No two trees quite the same green.
+    c = uCrown * vTone * (0.88 + 0.24 * fract(vSeed * 0.618));
+    if (uBloom > 0.0) {
+      // Flowers: crimson in patches over the outside of the crown, more of them as the season comes on.
+      float h = hash21(floor(vLocal.xz * 1.6 + vLocal.y * 2.3) + vSeed);
+      c = mix(c, vec3(0.72, 0.08, 0.16), step(1.0 - 0.5 * uBloom, h));
+    }
+  }
+  c *= lambert3(n) * planeShadow(vWorld);
+  outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
+}`,
+    { uCrown: { value: col(crown) }, uBloom: { value: bloom }, uTreeR: { value: 0 }, uDetail: { value: 0 } },
+  );
+}
+
 /* ------------------------------------------------------------------- plane */
 
 /**

@@ -6,6 +6,9 @@ import {
   ClampToEdgeWrapping,
   DataTexture,
   DynamicDrawUsage,
+  InstancedBufferGeometry,
+  InstancedInterleavedBuffer,
+  InterleavedBufferAttribute,
   LinearFilter,
   LinearMipmapLinearFilter,
   Mesh,
@@ -24,9 +27,10 @@ import {
 import type { StopPlacement, WorldDetail, WorldScene, WorldStats } from '../app/contracts';
 import type { StopId } from '../content/types';
 import type { WorldQuery } from '../shared/collision';
-import { FOG_FAR, NEAR_RADIUS } from '../shared/detail';
+import { FOG_FAR, NEAR_RADIUS, TREE_CAP } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
-import type { Look } from '../shared/timeOfDay';
+import { GROUND } from '../shared/palette';
+import { type Look, pohutukawaBloom } from '../shared/timeOfDay';
 import { type Ambient, createAmbient } from '../world/ambient';
 import type { DetailOutput, LandImage } from '../world/buildDetail';
 import { STYLE_SIZE } from '../world/extrude';
@@ -37,6 +41,7 @@ import { buildSkyDeck } from '../world/landmarks/skyDeck';
 import { buildSkyTower } from '../world/landmarks/skyTower';
 import { type NearSet, createNearSet, gatherIndices } from '../world/nearSet';
 import type { RibbonMesh } from '../world/ribbons';
+import { INSTANCE_SIZE, POHUTUKAWA, SPECIES, type TreeField, gatherTrees, treeShape } from '../world/trees';
 import { Beacons } from './beacons';
 import {
   createBuildingMaterial,
@@ -45,6 +50,7 @@ import {
   createRibbonMaterial,
   createSkyMaterial,
   createTerrainMaterial,
+  createTreeMaterial,
   createWaterMaterial,
 } from './materials';
 import { PixelRenderer } from './pixelRenderer';
@@ -105,6 +111,16 @@ export class WorldSceneImpl implements WorldScene {
   private groundImage: Texture;
   private land: { material: ShaderMaterial; fade: number } | null = null;
   private buildingMaterial: ShaderMaterial;
+  /** How many of the small things are drawn, as a share of the full count (the detail ladder's `props`). */
+  private props = 1;
+  private trees: {
+    field: TreeField;
+    set: NearSet;
+    species: { mesh: Mesh; geometry: InstancedBufferGeometry; material: ShaderMaterial; buffer: InstancedInterleavedBuffer; array: Float32Array }[];
+    fade: number;
+    /** What the instance buffers were last filled for: where the camera was, and the cap. */
+    at: { x: number; z: number; cap: number } | null;
+  } | null = null;
   private bridgeDetail: Mesh;
   private bridgeLine: { ax: number; az: number; bx: number; bz: number };
   private lastRender = 0;
@@ -244,7 +260,50 @@ export class WorldSceneImpl implements WorldScene {
   }
 
   private async installDetail(d: DetailOutput): Promise<void> {
-    await Promise.all([d.land ? this.installLand(d.land) : undefined, d.ribbons ? this.installRibbons(d.ribbons) : undefined]);
+    await Promise.all([
+      d.land ? this.installLand(d.land) : undefined,
+      d.ribbons ? this.installRibbons(d.ribbons) : undefined,
+      d.trees ? this.installTrees(d.trees) : undefined,
+    ]);
+  }
+
+  /** Trees: one instanced mesh a species, each with room for every tree that may be drawn at once. */
+  private async installTrees(field: TreeField): Promise<void> {
+    if (this.disposed || field.count === 0) return;
+    const crowns = [GROUND.treeBroadleaf, GROUND.treePine, GROUND.treePohutukawa];
+    const bloom = pohutukawaBloom(new Date());
+    const species = SPECIES.map((name, s) => {
+      const shape = treeShape(s);
+      const geometry = new InstancedBufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(shape.positions, 3));
+      geometry.setAttribute('aTone', new BufferAttribute(shape.tone, 1));
+      const array = new Float32Array(TREE_CAP * INSTANCE_SIZE);
+      const buffer = new InstancedInterleavedBuffer(array, INSTANCE_SIZE, 1);
+      buffer.setUsage(DynamicDrawUsage);
+      geometry.setAttribute('aTree', new InterleavedBufferAttribute(buffer, 4, 0));
+      geometry.setAttribute('aSeed', new InterleavedBufferAttribute(buffer, 1, 4));
+      geometry.instanceCount = 0;
+      const material = createTreeMaterial(this.shared, crowns[s], s === POHUTUKAWA ? bloom : 0);
+      const mesh = new Mesh(geometry, material);
+      mesh.name = `trees-${name}`;
+      // Where the instances are is known only to the shader.
+      mesh.frustumCulled = false;
+      return { mesh, geometry, material, buffer, array };
+    });
+    const cam = new PerspectiveCamera(60, 16 / 9, 0.5, 3500);
+    await Promise.all(species.map((s) => this.renderer.compileAsync(s.mesh, cam, this.scene)));
+    if (this.disposed) {
+      for (const s of species) {
+        s.geometry.dispose();
+        s.material.dispose();
+      }
+      return;
+    }
+    for (const s of species) {
+      this.disposables.push(s.geometry, s.material);
+      this.scene.add(s.mesh);
+    }
+    this.trees = { field, set: createNearSet(field.tiles), species, fade: 0, at: null };
   }
 
   /** The close-up ground: the terrain's material is replaced by the one that reads the land grid. */
@@ -358,6 +417,30 @@ export class WorldSceneImpl implements WorldScene {
       l.material.uniforms.uDetail.value = l.fade;
       l.material.uniforms.uGroundR.value = NEAR_RADIUS.ground * this.near;
     }
+    // Trees: the nearest ones, regathered when the near tiles change or the plane has moved on.
+    if (this.trees) {
+      const t = this.trees;
+      const radius = NEAR_RADIUS.trees * this.near;
+      const cap = Math.round(TREE_CAP * this.props);
+      t.fade = Math.min(1, t.fade + dt / 0.9);
+      const changed = t.set.update(cp.x, cp.z, cap > 0 ? radius : 0);
+      const moved = !t.at || t.at.cap !== cap || Math.hypot(cp.x - t.at.x, cp.z - t.at.z) > 45;
+      if (changed || moved) {
+        const counts = gatherTrees(t.field, t.set.tiles, cp.x, cp.z, cap, t.species.map((s) => s.array));
+        t.species.forEach((s, i) => {
+          s.geometry.instanceCount = counts[i];
+          s.mesh.visible = counts[i] > 0;
+          s.buffer.clearUpdateRanges();
+          s.buffer.addUpdateRange(0, counts[i] * INSTANCE_SIZE);
+          s.buffer.needsUpdate = true;
+        });
+        t.at = { x: cp.x, z: cp.z, cap };
+      }
+      for (const s of t.species) {
+        s.material.uniforms.uDetail.value = t.fade;
+        s.material.uniforms.uTreeR.value = radius;
+      }
+    }
     // Wall and roof detail reaches as far as the detail level allows.
     this.buildingMaterial.uniforms.uNearB.value = NEAR_RADIUS.buildings * this.near;
     // The bridge's lamp posts and flags: only when the plane is near the bridge.
@@ -419,6 +502,7 @@ export class WorldSceneImpl implements WorldScene {
     }
     if (d.extraScale !== this.px.extraScale) this.shared.uResY.value = this.px.setExtraScale(d.extraScale).height;
     this.near = d.near;
+    this.props = d.props;
   }
 
   onContextChange(cb: (lost: boolean) => void): void {

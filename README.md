@@ -166,6 +166,15 @@ The ground image says what colour the land is, at three metres a pixel. That is 
 - **The shoreline.** Near the plane the land ends where the image's edge falls *between* its pixels. The sea reads the same edge from the image's smaller copies, which the sampler smooths, so the foam and the pale shallows follow the shore in bands rather than in three-metre blocks, and a jetty a few metres wide raises no surf.
 - **How it arrives.** The terrain starts with a material that knows only the image, as before. When `land.bin` has loaded, a second material is compiled off-screen and swapped in, and fades up; nothing about it can delay the first view.
 
+### Trees
+
+The map does not list trees; it says where the canopy is (`land.bin`, above). Trees are stood in those cells by rule when the detail loads (`scatterTrees` in `src/world/trees.ts`, 35 ms in the worker): the same 70,550 trees every visit, because every choice is a hash of the cell. A tall canopy gets fewer and bigger trees, a low one more and smaller, each as tall as the LiDAR says the canopy there is.
+
+- **Three kinds**, each a trunk and a chunky crown of 26 to 30 triangles: round-crowned broadleaves everywhere, Norfolk pines here and there where the canopy is tall, and pohutukawa, mostly within 70 m of the sea.
+- **Pohutukawa flower for Christmas.** `pohutukawaBloom(date)` goes by the date in Auckland: the first crimson shows in the last week of November, they are at their height from the second week of December into the new year, and it is gone by the end of January.
+- **Only the nearest are drawn**: up to 1,600 within 340 m, as three instanced meshes (three draw calls, at most about 42,000 triangles in the densest bush). They are grouped by 150 m tile, and the instance buffers are refilled, nearest tile first, when the set of near tiles changes or the plane has moved 45 m. Further out, the canopy is the dark, leafy patch on the ground it always was, which is also what reads as each tree's shadow up close.
+- The detail ladder's `props` number thins them out and its last rung removes them.
+
 ### Buildings up close
 
 The map gives each building a footprint, a base, a top and one byte of style (wall and roof colour, which also says whether it is a house, a shop, a tower or a shed). Everything else is worked out when the page loads, so none of this added a byte to the download.
@@ -198,7 +207,7 @@ One mesh of about ninety coloured boxes (`src/flight/plane.ts`), and one draw ca
 - **Settings** live in the pause menu (Esc) and are kept in `localStorage` (`aw:settings:v1`, `src/app/settings.ts`): graphics (Auto, Sharp, Fast), time of day, sound, which way W or stick-up pitches, and reduced motion.
 - **Two kinds of quality.** The tier (`high` or `low`) decides what is loaded: the ground texture, and whether small buildings are built. It is picked once per visit from `?quality=`, else a pinned graphics setting, else the device (touch or four cores and under means low). Detail is adjusted while running, on a ladder in `src/shared/detail.ts`: first a shorter draw distance, then coarser 3D pixels. The HUD keeps its size throughout, because only the canvas changes scale.
 - **The governor** (`src/app/governor.ts`) drives that ladder when graphics is Auto. It steps down after about three seconds under 45 fps, tries stepping back up after twelve clean seconds, settles on the lower level if that brings the stutter back, and gives the detail back entirely if lowering it made frames no faster (a 30 Hz power-saving mode, say). `window.__aw.info().detail` shows the level.
-- **Budgets.** At most 60 draw calls and 700,000 triangles in view (today about 42 and 550,000 in the heaviest views, over the suburbs; terrain that lies wholly under the sea is not drawn), a 250 KB gzip ceiling on the title page's JavaScript with no three.js in it, and 3 MB of map data. `npm run check:bundle` and `npm run map:check` enforce the last two.
+- **Budgets.** At most 60 draw calls and 700,000 triangles in view (today about 45 and 570,000 in the heaviest views, over the suburbs; terrain that lies wholly under the sea is not drawn), a 250 KB gzip ceiling on the title page's JavaScript with no three.js in it, and 3 MB of map data. `npm run check:bundle` and `npm run map:check` enforce the last two.
 - **Reduced motion** (the device preference, or the setting): the title backdrop and the briefing camera hold still, the view does not roll with the bank, and "Fly me there" cuts to the stop instead of time-warping across the city.
 - **Idle.** Under the pause menu the scene is drawn twice and then left alone until something changes.
 - **Touch.** The stick and buttons show only while flying or walking, each action in the approach prompt is its own button, and MENU (top left) opens the pause menu and settings, which have no other way in without a keyboard. The touch layout is driven by `(pointer: coarse)` media queries, so a narrow desktop window does not show it.

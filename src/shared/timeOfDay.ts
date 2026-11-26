@@ -316,6 +316,20 @@ export function dayPart(solar: number): 'Dawn' | 'Morning' | 'Afternoon' | 'Dusk
   return 'Night';
 }
 
+/**
+ * How much the pohutukawa are in flower, 0 to 1, by the date in Auckland. They flower for
+ * Christmas: the first crimson shows in the last week of November, they are at their height from
+ * the second week of December into the new year, and the last of it is gone by the end of January.
+ */
+export function pohutukawaBloom(date: Date): number {
+  const c = aucklandClock(date);
+  // Days since 1 November, running on through the new year.
+  const day = c.dayOfYear >= 305 ? c.dayOfYear - 305 : c.dayOfYear + 60;
+  const rise = Math.min(1, Math.max(0, (day - 22) / 18)); // 23 Nov to 10 Dec
+  const fall = Math.min(1, Math.max(0, (91 - day) / 20)); // 11 Jan to 31 Jan
+  return Math.min(rise, fall);
+}
+
 const WALL_CLOCK = new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', hour12: true });
 /** The time on the wall in Auckland: "9:41 am". */
 export function aucklandTime(date: Date): string {

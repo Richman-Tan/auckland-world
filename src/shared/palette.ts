@@ -97,6 +97,10 @@ export const GROUND = {
   scrub: '#557d3c',
   /** Tree canopy seen from above (land.bin), a shade under the mapped woods. */
   canopy: '#3a5c2f',
+  /** Tree crowns, by species (world/trees.ts): broadleaf, Norfolk pine, pohutukawa. */
+  treeBroadleaf: '#55813c',
+  treePine: '#2f5b41',
+  treePohutukawa: '#46683a',
   sand: '#e8d9a8',
   rock: '#7a5d4e',
   roadCasing: '#2f2f35',
