@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-26T09:50:24.967Z",
+ "generatedAt": "2026-11-26T22:36:59.399Z",
  "fake": true,
  "sources": {},
  "attribution": [
@@ -658,6 +658,12 @@
    "width": 1200,
    "height": 1334,
    "cell": 6
+  },
+  "harbour": {
+   "file": "harbour.bin.gz",
+   "piers": 1,
+   "vertices": 52,
+   "berths": 28
   }
  },
  "files": {
@@ -688,6 +694,10 @@
   "land.bin.gz": {
    "bytes": 43495,
    "sha256": "fba15dde06384ae9a2ef2fcd050cb937e6cd3ec25c6dd301da8b8918e0c45d54"
+  },
+  "harbour.bin.gz": {
+   "bytes": 180,
+   "sha256": "31b978fb8123a28f1ce97d6616c3202d651474384c98ea0aab8552402c74c632"
   }
  }
 }

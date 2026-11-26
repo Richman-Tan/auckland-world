@@ -16,6 +16,8 @@ const NO_GLOW = 0;
 const GLOW_WHITE = 1;
 const GLOW_RED = 2;
 const GLOW_WINDOW = 3;
+/** Not a lamp: a part that keeps its own colour when the instance is painted. */
+const PLAIN = 4;
 
 /** A box and which lamp it is, if any. Bow and bonnet point along -z, like the plane's nose. */
 type Part = readonly [...Box, glow: number];
@@ -40,6 +42,30 @@ const CAR: readonly Part[] = [
 ];
 /** The car model is 2.6 m wide; this is the scale that makes it as wide as the lanes were checked for. */
 const BRIDGE_CAR_SCALE = (BRIDGE_CAR_HALF_WIDTH * 2) / 2.6;
+// Moored boats, each drawn to its own length (the model is MOORED_LENGTH long) and in white, so the
+// instance colour is its hull. y = 0 is the waterline; the bow points along -z.
+export const MOORED_LENGTH = 10;
+const YACHT_PARTS: readonly Part[] = [
+  [3.0, 1.1, 10, 0, 0.35, 0, 0xffffff, NO_GLOW], // hull
+  [2.0, 0.5, 6.4, 0, 1.15, 0.2, 0xe9efe6, PLAIN], // deck
+  [1.7, 0.75, 3.2, 0, 1.75, 0.6, 0xcfd8d2, PLAIN], // cabin
+  [0.28, 12.5, 0.28, 0, 7.6, -0.9, 0xc9cdd0, PLAIN], // mast
+  [0.22, 0.22, 4.4, 0, 2.6, 1.4, 0xe9e2cf, PLAIN], // boom, with the sail furled along it
+];
+const LAUNCH_PARTS: readonly Part[] = [
+  [3.3, 1.5, 10, 0, 0.5, 0, 0xffffff, NO_GLOW], // hull
+  [2.9, 1.5, 5.2, 0, 2.0, 0.4, 0xe9efe6, PLAIN], // cabin
+  [3.0, 0.6, 4.6, 0, 2.2, 0.4, 0x2b4a5c, PLAIN], // cabin windows (dark at night: nobody is aboard)
+  [2.4, 0.9, 2.4, 0, 3.2, 1.2, 0xd9dedb, PLAIN], // flybridge
+];
+/** Hull paints: most are white. */
+export const HULL_PAINT = ['#f1ece0', '#f1ece0', '#f1ece0', '#e3e6e2', '#1f3a5f', '#8f2d2a', '#2f5f63', '#3a3d42'] as const;
+
+/** The two moored-boat models (yacht, launch), ready to be instanced. */
+export function mooredBoatModels() {
+  return [model(YACHT_PARTS), model(LAUNCH_PARTS)];
+}
+
 const CAR_PAINT = ['#e9efe6', '#c9c2b4', '#2a9d8f', '#d7263d', '#3a3d42', '#f2c230', '#6f8a94', '#8b6a55'] as const;
 
 function model(parts: readonly Part[]) {

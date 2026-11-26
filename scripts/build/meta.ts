@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { decodeBuildings, decodeLand, decodeRoads, decodeTerrain, MAP_FORMAT_VERSION, type FileEntry, type MapMeta } from '../../src/shared/mapFormat';
+import { decodeBuildings, decodeHarbour, decodeLand, decodeRoads, decodeTerrain, MAP_FORMAT_VERSION, type FileEntry, type MapMeta } from '../../src/shared/mapFormat';
 import { ATTRIBUTION, BOUNDS, COLLISION_CELL, GROUND_MPP, LINZ, PUBLIC_MAP_DIR, TERRAIN_CELL, WORLD } from '../config';
 import { fitGeo, localToLonLat, trueNorthAngleRad } from '../lib/geo';
 import { sha256 } from '../lib/io';
@@ -15,6 +15,7 @@ const FILES = ['terrain.bin.gz', 'buildings.bin.gz', 'ground.webp', 'ground-lo.w
 /** Close-up detail: each is listed only if its stage has been run. */
 const ROADS_FILE = 'roads.bin.gz';
 const LAND_FILE = 'land.bin.gz';
+const HARBOUR_FILE = 'harbour.bin.gz';
 
 export function buildMeta() {
   const files: Record<string, FileEntry> = {};
@@ -36,6 +37,12 @@ export function buildMeta() {
     files[LAND_FILE] = { bytes: b.byteLength, sha256: sha256(b) };
     const land = decodeLand(new Uint8Array(gunzipSync(b)));
     detail.land = { file: LAND_FILE, width: land.width, height: land.height, cell: land.cell };
+  }
+  if (existsSync(resolve(PUBLIC_MAP_DIR, HARBOUR_FILE))) {
+    const b = readFileSync(resolve(PUBLIC_MAP_DIR, HARBOUR_FILE));
+    files[HARBOUR_FILE] = { bytes: b.byteLength, sha256: sha256(b) };
+    const harbour = decodeHarbour(new Uint8Array(gunzipSync(b)));
+    detail.harbour = { file: HARBOUR_FILE, piers: harbour.piers.length, vertices: harbour.piers.reduce((n, p) => n + p.ring.length / 2, 0), berths: harbour.berths.length };
   }
   const terrain = decodeTerrain(new Uint8Array(gunzipSync(raw['terrain.bin.gz'])));
   const bld = decodeBuildings(new Uint8Array(gunzipSync(raw['buildings.bin.gz'])));

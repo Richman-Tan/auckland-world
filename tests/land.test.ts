@@ -269,11 +269,12 @@ describe.runIf(existsSync(new URL('land.bin.gz', realDir)))('the land grid on th
 
   it('has trees over about a fifth of the land and only valid values', () => {
     let canopy = 0;
+    let bad = 0;
     for (let i = 0; i < land.cls.length; i++) {
-      expect(land.cls[i]).toBeLessThan(LAND_CLASSES.length);
-      expect(land.canopy[i]).toBeLessThanOrEqual(CANOPY_TALL);
+      if (land.cls[i] >= LAND_CLASSES.length || land.canopy[i] > CANOPY_TALL) bad++;
       if (land.canopy[i]) canopy++;
     }
+    expect(bad).toBe(0);
     // Of every cell, sea included (about a third of the map is sea).
     const share = canopy / land.cls.length;
     expect(share).toBeGreaterThan(0.06);

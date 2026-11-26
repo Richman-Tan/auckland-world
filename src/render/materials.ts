@@ -137,7 +137,7 @@ export interface LandSource {
  * uGroundR of the camera is drawn from the land grid instead (groundChunks.ts), behind a dithered
  * edge, and tree canopy tints the painted ground beyond.
  */
-export function createTerrainMaterial(shared: SharedUniforms, ground: Texture, land?: LandSource): ShaderMaterial {
+export function createTerrainMaterial(shared: SharedUniforms, ground: Texture, land?: LandSource, shoreLod = 1): ShaderMaterial {
   const vertex = /* glsl */ `
 out vec2 vUv;
 ${VERT_WORLD.replace('void main() {', 'void main() {\n  vUv = uv;')}`;
@@ -149,16 +149,18 @@ ${VERT_WORLD.replace('void main() {', 'void main() {\n  vUv = uv;')}`;
 in vec3 vWorld;
 in vec2 vUv;
 uniform sampler2D uGround;
+uniform float uShoreLod;
 void main() {
   vec4 t = texture(uGround, vUv);
-  if (t.a < 0.5) discard;
+  // Sea, or a sliver of land a few metres wide: a jetty, which is drawn as a pier, not as ground.
+  if (t.a < 0.5 || textureLod(uGround, vUv, uShoreLod + 1.6).a < 0.2) discard;
   vec3 n = flatNormal(vWorld);
   vec3 lit = mix(uAmbient, lambert3(n), 0.45);
   vec3 c = t.rgb * lit * planeShadow(vWorld);
   float d = length(vWorld - cameraPosition);
   outColor = vec4(pixelFog(c, d, 1.0), 1.0);
 }`,
-      { uGround: { value: ground } },
+      { uGround: { value: ground }, uShoreLod: { value: shoreLod } },
     );
   }
   return make(
@@ -168,9 +170,12 @@ void main() {
 in vec3 vWorld;
 in vec2 vUv;
 uniform sampler2D uGround;
+uniform float uShoreLod;
 ${LAND_UNIFORMS}
 ${LAND_LIB}
 void main() {
+  // A sliver of land a few metres wide is a jetty, which is drawn as a pier, not as ground.
+  if (textureLod(uGround, vUv, uShoreLod + 1.6).a < 0.2) discard;
   // Everything that needs screen-space derivatives is read before the branch below.
   vec4 t = texture(uGround, vUv);
   vec2 p = vWorld.xz;
@@ -214,6 +219,7 @@ void main() {
 }`,
     {
       uGround: { value: ground },
+      uShoreLod: { value: shoreLod },
       uLand: { value: land.texture },
       uLandGrid: { value: new Vector4(land.minX, land.minZ, 1 / land.cell, 0) },
       uGroundR: { value: 0 },
@@ -588,7 +594,8 @@ void main() {
  * Boats and bridge traffic: instanced box models (render/boxes.ts with display colours), flat-lit and
  * fogged like everything else. aGlow marks a model's lamps, which are just paint by day and shine
  * at night: 1 a white head or mast light, 2 a red tail light, 3 a warm cabin window. An instance
- * colour, when the mesh has one, tints the paint but not the lamps.
+ * colour, when the mesh has one, tints the paint (aGlow 0) but not the lamps, and not the parts
+ * marked 4: fittings that keep their own colour whatever the hull is painted.
  */
 export function createAmbientMaterial(shared: SharedUniforms): ShaderMaterial {
   return make(
@@ -616,7 +623,7 @@ in float vGlow;
 void main() {
   float dist = length(vWorld - cameraPosition);
   vec3 c = vColor * lambert3(flatNormal(vWorld));
-  if (vGlow > 0.5) {
+  if (vGlow > 0.5 && vGlow < 3.5) {
     vec3 lamp = vGlow < 1.5 ? vec3(1.0, 0.96, 0.78) : (vGlow < 2.5 ? vec3(1.0, 0.16, 0.12) : vec3(1.0, 0.82, 0.45));
     c = mix(c, lamp, uNight);
   } else {

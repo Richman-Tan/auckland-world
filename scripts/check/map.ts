@@ -7,6 +7,7 @@ import { content } from '../../src/content';
 import { placeStops } from '../../src/app/placement';
 import {
   decodeBuildings,
+  decodeHarbour,
   decodeLand,
   decodeRoads,
   decodeTerrain,
@@ -16,12 +17,13 @@ import {
   sampleTerrain,
   type MapMeta,
 } from '../../src/shared/mapFormat';
+import { berthsOverlap } from '../../src/shared/harbour';
 import { CANOPY_TALL, LAND_CLASSES, landCellAt } from '../../src/shared/land';
 import { PUBLIC_MAP_DIR } from '../config';
 import { sha256 } from '../lib/io';
 import { WORK } from '../lib/paths';
 import { loadMosaic, MW, toPx } from '../build/mosaic';
-import { downsampleMajority, loadWater } from '../build/water';
+import { downsampleMajority, isSea, loadWater } from '../build/water';
 
 const results: { name: string; ok: boolean; detail: string }[] = [];
 function check(name: string, ok: boolean, detail: string) {
@@ -119,6 +121,33 @@ if (meta.detail?.land) {
   for (let dz = -150; dz <= 150; dz += 6) for (let dx = -150; dx <= 150; dx += 6) if (land.canopy[landCellAt(land, meta.bounds.minX, meta.bounds.minZ, terminal.x + dx, terminal.z + dz)]) stacks++;
   // Without the roughness test about a fifth of the terminal reads as canopy.
   check('container stacks are not trees', stacks < 2601 * 0.03, `${stacks} canopy cells of 2601 on the container terminal`);
+}
+
+if (meta.detail?.harbour) {
+  const hmeta = meta.detail.harbour;
+  check('harbour budget', size(hmeta.file) <= 60 * 1024, kb(size(hmeta.file)));
+  const harbour = decodeHarbour(new Uint8Array(gunzipSync(readFileSync(resolve(PUBLIC_MAP_DIR, hmeta.file)))));
+  const verts = harbour.piers.reduce((n, p) => n + p.ring.length / 2, 0);
+  check('harbour counts match meta', harbour.piers.length === hmeta.piers && verts === hmeta.vertices && harbour.berths.length === hmeta.berths, `${harbour.piers.length} piers / ${verts} vertices / ${harbour.berths.length} berths`);
+  check('marinas have boats', within(harbour.berths.length, 800, 3000), `${harbour.berths.length} boats`);
+  const sea = loadWater().mask;
+  let dry = 0, outside = 0, odd = 0;
+  for (const b of harbour.berths) {
+    if (!isSea(sea, b.x, b.z)) dry++;
+    if (b.x < meta.bounds.minX || b.x > meta.bounds.maxX || b.z < meta.bounds.minZ || b.z > meta.bounds.maxZ) outside++;
+    if (!(b.length >= 5.9 && b.length <= 18.1)) odd++;
+  }
+  check('every boat is afloat', dry === 0 && outside === 0, `${dry} on land, ${outside} outside the map`);
+  check('boat lengths 6-18 m', odd === 0, `${odd} outside the range`);
+  let touching = 0;
+  for (let i = 0; i < harbour.berths.length; i++) {
+    for (let j = i + 1; j < harbour.berths.length; j++) {
+      const a = harbour.berths[i];
+      const c = harbour.berths[j];
+      if (Math.abs(a.x - c.x) < 20 && Math.abs(a.z - c.z) < 20 && berthsOverlap(a, c)) touching++;
+    }
+  }
+  check('no two boats touch', touching === 0, `${touching} overlapping pairs`);
 }
 
 /* ---- buildings */

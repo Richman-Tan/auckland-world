@@ -4,15 +4,17 @@ import {
   BufferGeometry,
   type Camera,
   ClampToEdgeWrapping,
+  Color,
   DataTexture,
   DynamicDrawUsage,
   InstancedBufferGeometry,
   InstancedInterleavedBuffer,
+  InstancedMesh,
   InterleavedBufferAttribute,
   LinearFilter,
   LinearMipmapLinearFilter,
   Mesh,
-  type Object3D,
+  Object3D,
   PerspectiveCamera,
   PlaneGeometry,
   RGFormat,
@@ -27,13 +29,14 @@ import {
 import type { StopPlacement, WorldDetail, WorldScene, WorldStats } from '../app/contracts';
 import type { StopId } from '../content/types';
 import type { WorldQuery } from '../shared/collision';
-import { FOG_FAR, NEAR_RADIUS, TREE_CAP } from '../shared/detail';
+import { BOAT_CAP, FOG_FAR, NEAR_RADIUS, TREE_CAP } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
 import { GROUND } from '../shared/palette';
 import { type Look, pohutukawaBloom } from '../shared/timeOfDay';
-import { type Ambient, createAmbient } from '../world/ambient';
+import { type Ambient, HULL_PAINT, MOORED_LENGTH, createAmbient, mooredBoatModels } from '../world/ambient';
 import type { DetailOutput, LandImage } from '../world/buildDetail';
 import { STYLE_SIZE } from '../world/extrude';
+import { BOAT_KINDS, type PierMesh, berthHash } from '../world/harbour';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge, buildHarbourBridgeDetail } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
@@ -44,6 +47,7 @@ import type { RibbonMesh } from '../world/ribbons';
 import { INSTANCE_SIZE, POHUTUKAWA, SPECIES, type TreeField, gatherTrees, treeShape } from '../world/trees';
 import { Beacons } from './beacons';
 import {
+  createAmbientMaterial,
   createBuildingMaterial,
   createLandmarkMaterial,
   createOutskirtsMaterial,
@@ -121,12 +125,23 @@ export class WorldSceneImpl implements WorldScene {
     /** What the instance buffers were last filled for: where the camera was, and the cap. */
     at: { x: number; z: number; cap: number } | null;
   } | null = null;
+  /** Moored boats: one instanced mesh a kind, refilled with the nearest as the plane moves, like the trees. */
+  private boats: {
+    field: TreeField;
+    set: NearSet;
+    kinds: { mesh: InstancedMesh; scratch: Float32Array }[];
+    at: { x: number; z: number; cap: number } | null;
+  } | null = null;
+  private landmarkMaterial: ShaderMaterial;
+  private shoreLod = 1;
   private bridgeDetail: Mesh;
   private bridgeLine: { ax: number; az: number; bx: number; bz: number };
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
   private tmp = new Vector3();
+  private dummy = new Object3D();
+  private paint = new Color();
 
   constructor(parts: WorldParts) {
     this.meta = parts.meta;
@@ -158,7 +173,11 @@ export class WorldSceneImpl implements WorldScene {
 
     // Terrain and outskirts.
     const terrainGeo = track(meshGeometry(parts.built.terrainMesh));
-    const terrain = new Mesh(terrainGeo, track(createTerrainMaterial(sh, ground)));
+    // The level of the ground image whose pixels are about six metres (never the full-size one,
+    // which is read unsmoothed): what the shoreline is read from.
+    const groundWidth = (ground.image as { width?: number } | null)?.width ?? meta.ground.width;
+    this.shoreLod = Math.max(0.6, Math.log2(6 / ((meta.bounds.maxX - meta.bounds.minX) / Math.max(1, groundWidth))));
+    const terrain = new Mesh(terrainGeo, track(createTerrainMaterial(sh, ground, undefined, this.shoreLod)));
     terrain.name = 'terrain';
     this.scene.add(terrain);
     this.terrain = terrain;
@@ -172,10 +191,7 @@ export class WorldSceneImpl implements WorldScene {
     const b = meta.bounds;
     const rect = new Vector4(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
     const waterGeo = track(new PlaneGeometry(30000, 30000).rotateX(-Math.PI / 2));
-    // The level of the ground image whose pixels are about six metres (never the full-size one,
-    // which is read unsmoothed).
-    const groundMpp = rect.z / Math.max(1, (ground.image as { width?: number } | null)?.width ?? meta.ground.width);
-    const water = new Mesh(waterGeo, track(createWaterMaterial(sh, ground, rect, Math.max(0.6, Math.log2(6 / groundMpp)))));
+    const water = new Mesh(waterGeo, track(createWaterMaterial(sh, ground, rect, this.shoreLod)));
     water.position.set(0, meta.water.level, 0);
     water.frustumCulled = false;
     water.renderOrder = 10;
@@ -200,6 +216,7 @@ export class WorldSceneImpl implements WorldScene {
 
     // Landmarks.
     const lmMat = track(createLandmarkMaterial(sh, 1));
+    this.landmarkMaterial = lmMat;
     const tower = new Mesh(track(buildSkyTower(meta)), lmMat);
     tower.name = 'sky-tower';
     this.scene.add(tower);
@@ -264,7 +281,46 @@ export class WorldSceneImpl implements WorldScene {
       d.land ? this.installLand(d.land) : undefined,
       d.ribbons ? this.installRibbons(d.ribbons) : undefined,
       d.trees ? this.installTrees(d.trees) : undefined,
+      d.piers ? this.installPiers(d.piers) : undefined,
+      d.boats ? this.installBoats(d.boats) : undefined,
     ]);
+  }
+
+  /** The piers: one mesh, lit like the landmarks. */
+  private async installPiers(piers: PierMesh): Promise<void> {
+    if (this.disposed || piers.triangles === 0) return;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(piers.positions, 3));
+    geometry.setAttribute('aColor', new BufferAttribute(piers.colors, 4, true));
+    geometry.computeBoundingSphere();
+    const mesh = new Mesh(geometry, this.landmarkMaterial);
+    mesh.name = 'piers';
+    this.disposables.push(geometry);
+    this.scene.add(mesh);
+  }
+
+  /** Moored boats: room for every boat that may be drawn at once, of either kind. */
+  private async installBoats(field: TreeField): Promise<void> {
+    if (this.disposed || field.count === 0) return;
+    const material = createAmbientMaterial(this.shared);
+    const paint = new Color();
+    const kinds = mooredBoatModels().map((geometry, k) => {
+      const mesh = new InstancedMesh(geometry, material, BOAT_CAP);
+      mesh.name = `boats-${BOAT_KINDS[k]}`;
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      // Every instance needs a colour before the first draw, so the attribute exists when the shader is compiled.
+      mesh.setColorAt(0, paint.setRGB(1, 1, 1));
+      this.disposables.push(geometry, mesh);
+      return { mesh, scratch: new Float32Array(BOAT_CAP * INSTANCE_SIZE) };
+    });
+    this.disposables.push(material);
+    const cam = new PerspectiveCamera(60, 16 / 9, 0.5, 3500);
+    await Promise.all(kinds.map((k) => this.renderer.compileAsync(k.mesh, cam, this.scene)));
+    if (this.disposed) return;
+    for (const k of kinds) this.scene.add(k.mesh);
+    this.boats = { field, set: createNearSet(field.tiles), kinds, at: null };
   }
 
   /** Trees: one instanced mesh a species, each with room for every tree that may be drawn at once. */
@@ -319,7 +375,7 @@ export class WorldSceneImpl implements WorldScene {
     texture.generateMipmaps = true;
     texture.needsUpdate = true;
     const b = this.meta.bounds;
-    const material = createTerrainMaterial(this.shared, this.groundImage, { texture, minX: b.minX, minZ: b.minZ, cell: land.cell });
+    const material = createTerrainMaterial(this.shared, this.groundImage, { texture, minX: b.minX, minZ: b.minZ, cell: land.cell }, this.shoreLod);
     // Compiled on a stand-in first, so the swap costs the frame it happens on nothing.
     const cam = new PerspectiveCamera(60, 16 / 9, 0.5, 3500);
     await this.renderer.compileAsync(new Mesh(this.terrain.geometry, material), cam, this.scene);
@@ -439,6 +495,36 @@ export class WorldSceneImpl implements WorldScene {
       for (const s of t.species) {
         s.material.uniforms.uDetail.value = t.fade;
         s.material.uniforms.uTreeR.value = radius;
+      }
+    }
+    // Moored boats: the nearest, placed afresh when the near tiles change or the plane has moved on.
+    if (this.boats) {
+      const b = this.boats;
+      const cap = Math.round(BOAT_CAP * this.props);
+      const changed = b.set.update(cp.x, cp.z, cap > 0 ? NEAR_RADIUS.boats * this.near : 0);
+      const moved = !b.at || b.at.cap !== cap || Math.hypot(cp.x - b.at.x, cp.z - b.at.z) > 60;
+      if (changed || moved) {
+        const counts = gatherTrees(b.field, b.set.tiles, cp.x, cp.z, cap, b.kinds.map((k) => k.scratch));
+        b.kinds.forEach((k, i) => {
+          const a = k.scratch;
+          for (let n = 0; n < counts[i]; n++) {
+            const x = a[n * INSTANCE_SIZE];
+            const z = a[n * INSTANCE_SIZE + 2];
+            this.dummy.position.set(x, a[n * INSTANCE_SIZE + 1], z);
+            this.dummy.rotation.set(0, -(a[n * INSTANCE_SIZE + 4] / 256) * Math.PI * 2, 0);
+            this.dummy.scale.setScalar(a[n * INSTANCE_SIZE + 3] / MOORED_LENGTH);
+            this.dummy.updateMatrix();
+            k.mesh.setMatrixAt(n, this.dummy.matrix);
+            const hex = HULL_PAINT[Math.floor(berthHash(x, z, 2) * HULL_PAINT.length) % HULL_PAINT.length];
+            const v = parseInt(hex.slice(1), 16);
+            k.mesh.setColorAt(n, this.paint.setRGB(((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255));
+          }
+          k.mesh.count = counts[i];
+          k.mesh.visible = counts[i] > 0;
+          k.mesh.instanceMatrix.needsUpdate = true;
+          if (k.mesh.instanceColor) k.mesh.instanceColor.needsUpdate = true;
+        });
+        b.at = { x: cp.x, z: cp.z, cap };
       }
     }
     // Wall and roof detail reaches as far as the detail level allows.

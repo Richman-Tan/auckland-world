@@ -15,12 +15,15 @@ import {
   type RoadWay,
   MAP_FORMAT_VERSION,
   type TerrainGrid,
+  encodeHarbour,
   encodeLand,
   encodeRoads,
+  type HarbourData,
   encodeBuildings,
   encodeTerrain,
   sampleTerrain,
 } from '../../src/shared/mapFormat';
+import { berthsFromPier } from '../../src/shared/harbour';
 import { CANOPY_LOW, CANOPY_MID, CANOPY_TALL, LAND_CELL, type LandGrid, landCode } from '../../src/shared/land';
 import { ROAD_CLASSES, roadFlags } from '../../src/shared/roads';
 import { GROUND, makeStyle } from '../../src/shared/palette';
@@ -307,6 +310,29 @@ for (let r = 0; r < landH; r++) {
 }
 files['land.bin.gz'] = writeGz(resolve(out, 'land.bin.gz'), encodeLand(fakeLand));
 
+// A marina: one pier out from the southern shore with a comb of fingers down each side, and a
+// boat in every berth that is over water.
+function combPier(x0: number, z0: number, length: number, fingers: number, fingerLength: number): number[] {
+  const hw = 1.5;
+  const fw = 0.6;
+  const ring: number[] = [x0 + hw, z0];
+  for (let k = 0; k < fingers; k++) {
+    const zc = z0 - 14 - k * 12;
+    ring.push(x0 + hw, zc + fw, x0 + hw + fingerLength, zc + fw, x0 + hw + fingerLength, zc - fw, x0 + hw, zc - fw);
+  }
+  ring.push(x0 + hw, z0 - length, x0 - hw, z0 - length);
+  for (let k = fingers - 1; k >= 0; k--) {
+    const zc = z0 - 14 - k * 12;
+    ring.push(x0 - hw, zc - fw, x0 - hw - fingerLength, zc - fw, x0 - hw - fingerLength, zc + fw, x0 - hw, zc + fw);
+  }
+  ring.push(x0 - hw, z0);
+  return ring;
+}
+const marinaX = 600;
+const fakePier = combPier(marinaX, southShore(marinaX) + 6, 100, 6, 10);
+const fakeHarbour: HarbourData = { piers: [{ ring: fakePier, floating: true }], berths: berthsFromPier(fakePier).filter((b) => isWater(b.x, b.z)) };
+files['harbour.bin.gz'] = writeGz(resolve(out, 'harbour.bin.gz'), encodeHarbour(fakeHarbour));
+
 let minH = Infinity;
 let maxH = -Infinity;
 for (const v of heights) {
@@ -369,6 +395,7 @@ const meta: MapMeta = {
   detail: {
     roads: { file: 'roads.bin.gz', ways: fakeRoads.length, vertices: fakeRoadVertices },
     land: { file: 'land.bin.gz', width: landW, height: landH, cell: LAND_CELL },
+    harbour: { file: 'harbour.bin.gz', piers: fakeHarbour.piers.length, vertices: fakePier.length / 2, berths: fakeHarbour.berths.length },
   },
   files,
 };

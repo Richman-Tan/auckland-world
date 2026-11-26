@@ -90,6 +90,8 @@ export interface MapMeta {
     roads?: { file: string; ways: number; vertices: number };
     /** What the ground is, cell by cell, and the tree canopy over it (land.bin). */
     land?: { file: string; width: number; height: number; cell: number };
+    /** Piers and the berths along them (harbour.bin). */
+    harbour?: { file: string; piers: number; vertices: number; berths: number };
   };
   files: Record<string, FileEntry>;
 }
@@ -559,6 +561,123 @@ export function encodeRoads(list: readonly RoadWay[]): Uint8Array {
   }
   w.pad4();
   return w.bytes();
+}
+
+/* --------------------------------------------------------------- harbour.bin */
+
+/** A pier's outline (x, z pairs, not closed) and whether it floats (a marina pontoon) or stands on piles. */
+export interface Pier {
+  ring: number[];
+  floating: boolean;
+}
+/** A berth: where a moored boat's middle is, which way its bow points (radians, 0 = north, clockwise) and how long it is. */
+export interface Berth {
+  x: number;
+  z: number;
+  heading: number;
+  length: number;
+}
+export interface HarbourData {
+  piers: Pier[];
+  berths: Berth[];
+}
+
+/**
+ * harbour.bin ("AWH1"): u16 version, u16 0, u32 piers, u32 vertices, u32 berths, f32 xz step; then
+ * a byte a pier (1 = floating), a u16 a pier (its vertex count), the vertices as i16 steps (the
+ * first of each pier absolute, the rest as differences), and four numbers a berth: x and z as i16
+ * steps, heading as a byte (256 to the turn) and length as a byte (decimetres). Sections are padded to four.
+ */
+export function encodeHarbour(h: HarbourData): Uint8Array {
+  let V = 0;
+  for (const p of h.piers) {
+    const n = p.ring.length / 2;
+    if (p.ring.length % 2 || n < 3 || n > 65535) throw new Error('A pier needs 3 to 65535 (x, z) vertices');
+    V += n;
+  }
+  const w = new Writer(32 + h.piers.length * 4 + V * 4 + h.berths.length * 6);
+  w.magic('AWH1');
+  w.u16(MAP_FORMAT_VERSION);
+  w.u16(0);
+  w.u32(h.piers.length);
+  w.u32(V);
+  w.u32(h.berths.length);
+  w.f32(XZ_STEP);
+  for (const p of h.piers) w.u8v(p.floating ? 1 : 0);
+  w.pad4();
+  for (const p of h.piers) w.u16(p.ring.length / 2);
+  w.pad4();
+  for (const p of h.piers) {
+    let px = 0;
+    let pz = 0;
+    for (let i = 0; i < p.ring.length; i += 2) {
+      const qx = toI16(p.ring[i] / XZ_STEP);
+      const qz = toI16(p.ring[i + 1] / XZ_STEP);
+      w.i16(i === 0 ? qx : toI16(qx - px));
+      w.i16(i === 0 ? qz : toI16(qz - pz));
+      px = qx;
+      pz = qz;
+    }
+  }
+  w.pad4();
+  for (const b of h.berths) {
+    w.i16(toI16(b.x / XZ_STEP));
+    w.i16(toI16(b.z / XZ_STEP));
+    const turn = (((b.heading / (2 * Math.PI)) % 1) + 1) % 1;
+    w.u8v(Math.round(turn * 256) & 255);
+    w.u8v(Math.min(255, Math.max(0, Math.round(b.length * 10))));
+  }
+  w.pad4();
+  return w.bytes();
+}
+
+export function decodeHarbour(bytes: Uint8Array): HarbourData {
+  const r = new Reader(bytes);
+  r.check(24);
+  r.magic('AWH1');
+  const version = r.u16();
+  if (version !== MAP_FORMAT_VERSION) throw new Error(`harbour.bin version ${version} unsupported`);
+  r.u16();
+  const P = r.u32();
+  const V = r.u32();
+  const B = r.u32();
+  const step = r.f32();
+  r.check(P * 3 + V * 4 + B * 6);
+  const floating: boolean[] = [];
+  for (let i = 0; i < P; i++) floating.push(r.u8v() === 1);
+  r.pad4();
+  const counts: number[] = [];
+  let total = 0;
+  for (let i = 0; i < P; i++) {
+    counts.push(r.u16());
+    total += counts[i];
+  }
+  if (total !== V) throw new Error('harbour.bin: vertex counts do not add up');
+  r.pad4();
+  const piers: Pier[] = [];
+  for (let i = 0; i < P; i++) {
+    const ring: number[] = [];
+    let px = 0;
+    let pz = 0;
+    for (let v = 0; v < counts[i]; v++) {
+      const dx = r.i16();
+      const dz = r.i16();
+      px = v === 0 ? dx : px + dx;
+      pz = v === 0 ? dz : pz + dz;
+      ring.push(px * step, pz * step);
+    }
+    piers.push({ ring, floating: floating[i] });
+  }
+  r.pad4();
+  const berths: Berth[] = [];
+  for (let i = 0; i < B; i++) {
+    const x = r.i16() * step;
+    const z = r.i16() * step;
+    const heading = (r.u8v() / 256) * 2 * Math.PI;
+    const length = r.u8v() / 10;
+    berths.push({ x, z, heading, length });
+  }
+  return { piers, berths };
 }
 
 /* ------------------------------------------------------------------ land.bin */

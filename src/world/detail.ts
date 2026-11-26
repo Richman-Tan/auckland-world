@@ -11,7 +11,7 @@ import { fetchBytes } from './loader';
 
 export function loadDetail(base: string, meta: MapMeta, terrain: TerrainGrid, quality: QualityTier): Promise<DetailOutput> {
   const files = meta.detail;
-  if (!files?.roads && !files?.land) return Promise.resolve({});
+  if (!files?.roads && !files?.land && !files?.harbour) return Promise.resolve({});
   // A file that fails to arrive is left out; the rest is still built.
   const get = (name: string | undefined) =>
     name === undefined
@@ -20,10 +20,10 @@ export function loadDetail(base: string, meta: MapMeta, terrain: TerrainGrid, qu
           console.warn(`${name} did not load:`, e);
           return undefined;
         });
-  return Promise.all([get(files.roads?.file), get(files.land?.file)]).then(
-    ([roads, land]) =>
+  return Promise.all([get(files.roads?.file), get(files.land?.file), get(files.harbour?.file)]).then(
+    ([roads, land, harbour]) =>
       new Promise<DetailOutput>((resolve, reject) => {
-        if (!roads && !land) return resolve({});
+        if (!roads && !land && !harbour) return resolve({});
         const worker = new Worker(new URL('./geometry.worker.ts', import.meta.url), { type: 'module' });
         worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
           worker.terminate();
@@ -35,8 +35,8 @@ export function loadDetail(base: string, meta: MapMeta, terrain: TerrainGrid, qu
           reject(new Error(`detail worker failed: ${ev.message}`));
         };
         // The terrain is copied, not handed over: the main thread still needs it.
-        const req: WorkerRequest = { type: 'detail', input: { roads, land, bridge: meta.landmarks.harbourBridge, waterLevel: meta.water.level, terrain, bounds: meta.bounds, quality } };
-        worker.postMessage(req, [roads, land].flatMap((b) => (b ? [b.buffer as ArrayBuffer] : [])));
+        const req: WorkerRequest = { type: 'detail', input: { roads, land, harbour, bridge: meta.landmarks.harbourBridge, waterLevel: meta.water.level, terrain, bounds: meta.bounds, quality } };
+        worker.postMessage(req, [roads, land, harbour].flatMap((b) => (b ? [b.buffer as ArrayBuffer] : [])));
       }),
   );
 }

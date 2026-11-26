@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-26T09:45:49.803Z",
+ "generatedAt": "2026-11-26T22:37:56.960Z",
  "sources": {
   "osm": {
    "baseTimestamp": "2026-11-04T21:42:19Z"
@@ -916,6 +916,12 @@
    "width": 1200,
    "height": 1334,
    "cell": 6
+  },
+  "harbour": {
+   "file": "harbour.bin.gz",
+   "piers": 297,
+   "vertices": 7796,
+   "berths": 1594
   }
  },
  "files": {
@@ -946,6 +952,10 @@
   "land.bin.gz": {
    "bytes": 277789,
    "sha256": "b94afd7f4b98e21669c7dbc08529180e8c1b306504b33b3d0e2713aff67d309b"
+  },
+  "harbour.bin.gz": {
+   "bytes": 24663,
+   "sha256": "df7a2508ff4dc2f2186a5c58f7146ce4ca58f92adb1582948f311493c6a6fe0f"
   }
  }
 }

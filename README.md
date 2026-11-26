@@ -166,6 +166,14 @@ The ground image says what colour the land is, at three metres a pixel. That is 
 - **The shoreline.** Near the plane the land ends where the image's edge falls *between* its pixels. The sea reads the same edge from the image's smaller copies, which the sampler smooths, so the foam and the pale shallows follow the shore in bands rather than in three-metre blocks, and a jetty a few metres wide raises no surf.
 - **How it arrives.** The terrain starts with a material that knows only the image, as before. When `land.bin` has loaded, a second material is compiled off-screen and swapped in, and fades up; nothing about it can delay the first view.
 
+### The harbour
+
+The ground image paints a marina pier as a few specks of land, which is all three metres a pixel can do. `harbour.bin.gz` (24 KB, from the `harbour` stage) keeps the real outlines of the 297 piers OpenStreetMap maps here, and the berths along them.
+
+- **Berths are found in the outlines** (`src/shared/harbour.ts`). A marina pier is drawn as a walkway with a comb of fingers; a finger shows in the outline as a short edge between two long ones running back the other way, and a boat lies along each side of it. That finds 2,358 berths. The pipeline keeps a boat only where it would float (over the sea, on no pier, touching no boat already placed), and leaves about one berth in six empty, which leaves 1,594 boats, more than half of them at Westhaven. `npm run map:check` holds every boat afloat and apart.
+- **Piers** are raised into low decks with a skirt to the water, pontoons lower than piers on piles, as one mesh of about 23,000 triangles. The terrain no longer draws slivers of land a few metres wide, so the specks the piers used to be are gone.
+- **Boats** are yachts and launches, each drawn to its berth's length with its own hull paint, instanced like the trees: the nearest 800 within a kilometre, two draw calls. Nobody is aboard, so they are dark at night. A test keeps the ferries and the bridge cruise at least ten metres clear of every one.
+
 ### Trees
 
 The map does not list trees; it says where the canopy is (`land.bin`, above). Trees are stood in those cells by rule when the detail loads (`scatterTrees` in `src/world/trees.ts`, 35 ms in the worker): the same 70,550 trees every visit, because every choice is a hash of the cell. A tall canopy gets fewer and bigger trees, a low one more and smaller, each as tall as the LiDAR says the canopy there is.
@@ -260,7 +268,7 @@ Near the Sky Tower (or from the projects briefing) press E to land inside the po
 
 ### Map pipeline
 
-`npm run map` = `map:fetch` (cached in `$AW_DATA_DIR`, default `./data`; a second run makes 0 network requests; `-- --only=osm|linz`, `--refresh`) then `map:build` (`-- --stage=water,terrain,landmarks,places,buildings,roads,land,ground,minimap,meta`) then `map:check`. Outputs go to `public/map/`; the report and debug PNGs (water, hillshade, heights, height-sources, land) go to `$AW_DATA_DIR/work/`.
+`npm run map` = `map:fetch` (cached in `$AW_DATA_DIR`, default `./data`; a second run makes 0 network requests; `-- --only=osm|linz`, `--refresh`) then `map:build` (`-- --stage=water,terrain,landmarks,places,buildings,roads,land,harbour,ground,minimap,meta`) then `map:check`. Outputs go to `public/map/`; the report and debug PNGs (water, hillshade, heights, height-sources, land) go to `$AW_DATA_DIR/work/`.
 
 - Sources: OpenStreetMap via Overpass (three endpoints, 2 s spacing, 5/15/45 s backoff, 2x2 split on timeout) and the LINZ Auckland 2024 LiDAR 1 m DEM and DSM (public S3, checksum-verified against the STAC `file:checksum` multihash). Tiles that merely touch the world rectangle are not fetched.
 - **LERC decode path:** the LINZ tiles are Float32 COGs with TIFF compression 34887 (LERC). `geotiff@2.1.3`'s built-in LERC decoder reads them directly (`GeoTIFF.fromFile` + `readRasters` on a window), so the `lerc@4` WASM fallback and GDAL were not needed. Spike check: `BA32_10000_0401` decodes in about 1 s with max 195.743 and mean 21.919, matching its header statistics. `scripts/build/mosaic.ts` reads each tile in 1024-row strips into one 7200 x 8000 Float32 mosaic per kind (nodata becomes NaN); nothing at full resolution is written to disk.

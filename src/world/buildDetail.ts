@@ -3,9 +3,10 @@
  * Pure (no DOM, no three); runs in the geometry worker.
  */
 import { landTexture } from '../shared/land';
-import { type Bounds, type MapMeta, type TerrainGrid, decodeLand, decodeRoads } from '../shared/mapFormat';
+import { type Bounds, type MapMeta, type TerrainGrid, decodeHarbour, decodeLand, decodeRoads } from '../shared/mapFormat';
 import type { QualityTier } from '../shared/detail';
 import { inflateIfGzip } from './buildWorld';
+import { type PierMesh, boatField, buildPierMesh } from './harbour';
 import { type RibbonMesh, bridgeStrips, buildRibbons, ribbonTransferables } from './ribbons';
 import { type TreeField, scatterTrees, treeTransferables } from './trees';
 import { sampleTerrainMesh } from './terrainMesh';
@@ -15,6 +16,8 @@ export interface DetailInput {
   roads?: Uint8Array;
   /** land.bin, gzipped or not; absent if the map has none. */
   land?: Uint8Array;
+  /** harbour.bin, gzipped or not; absent if the map has none. */
+  harbour?: Uint8Array;
   /** The Harbour Bridge as measured, so its deck gets its lanes along with the roads. */
   bridge?: MapMeta['landmarks']['harbourBridge'];
   /** Sea level: nothing is planted at or below it. */
@@ -37,6 +40,9 @@ export interface DetailOutput {
   land?: LandImage;
   /** Trees, stood wherever the land grid says there is canopy. */
   trees?: TreeField;
+  /** The piers as one mesh, and the boats moored along them as a field of instances. */
+  piers?: PierMesh;
+  boats?: TreeField;
 }
 
 export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
@@ -57,6 +63,11 @@ export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
     out.land = { width: grid.width, height: grid.height, cell: grid.cell, pixels: landTexture(grid) };
     out.trees = scatterTrees(grid, input.bounds, heightAt, { waterLevel: input.waterLevel ?? 0 });
   }
+  if (input.harbour) {
+    const harbour = decodeHarbour(await inflateIfGzip(input.harbour));
+    out.piers = buildPierMesh(harbour, input.waterLevel ?? 0);
+    out.boats = boatField(harbour, input.bounds, input.waterLevel ?? 0);
+  }
   return out;
 }
 
@@ -64,5 +75,7 @@ export function detailTransferables(out: DetailOutput): ArrayBuffer[] {
   const list = out.ribbons ? ribbonTransferables(out.ribbons) : [];
   if (out.land) list.push(out.land.pixels.buffer as ArrayBuffer);
   if (out.trees) list.push(...treeTransferables(out.trees));
+  if (out.piers) list.push(out.piers.positions.buffer as ArrayBuffer, out.piers.colors.buffer as ArrayBuffer);
+  if (out.boats) list.push(...treeTransferables(out.boats));
   return list;
 }
