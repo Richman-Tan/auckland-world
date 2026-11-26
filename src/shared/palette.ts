@@ -95,6 +95,8 @@ export const GROUND = {
   pitch: '#86ad57',
   wood: '#3f6431',
   scrub: '#557d3c',
+  /** Tree canopy seen from above (land.bin), a shade under the mapped woods. */
+  canopy: '#3a5c2f',
   sand: '#e8d9a8',
   rock: '#7a5d4e',
   roadCasing: '#2f2f35',

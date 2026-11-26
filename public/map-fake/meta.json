@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-26T02:44:27.421Z",
+ "generatedAt": "2026-11-26T09:27:45.439Z",
  "fake": true,
  "sources": {},
  "attribution": [
@@ -503,6 +503,12 @@
    "file": "roads.bin.gz",
    "ways": 60,
    "vertices": 120
+  },
+  "land": {
+   "file": "land.bin.gz",
+   "width": 1200,
+   "height": 1334,
+   "cell": 6
   }
  },
  "files": {
@@ -529,6 +535,10 @@
   "roads.bin.gz": {
    "bytes": 262,
    "sha256": "bc5c0eb03825ea18cd18e4df19ec8ff7b9965e4a0c08110ff05fa1161dc62682"
+  },
+  "land.bin.gz": {
+   "bytes": 43495,
+   "sha256": "fba15dde06384ae9a2ef2fcd050cb937e6cd3ec25c6dd301da8b8918e0c45d54"
   }
  }
 }

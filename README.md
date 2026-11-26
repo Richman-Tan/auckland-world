@@ -7,7 +7,7 @@
 
 [![The title screen: the name and five stops on the left, the Sky Tower and the city behind](docs/screenshots/title.jpg)](https://richmantan.dev/)
 
-The city is real: about 33,000 buildings from OpenStreetMap on terrain from LINZ's 1 m LiDAR survey, 7.2 by 8 km, packed into about 2 MB of map data and drawn at low resolution with dithered, toon-stepped shaders. There is no framework and no game engine, just TypeScript, [three.js](https://threejs.org/) and Vite. The title screen is interactive after 35 KB of gzipped JavaScript; three.js and the map load behind it.
+The city is real: about 33,000 buildings from OpenStreetMap on terrain from LINZ's 1 m LiDAR survey, 7.2 by 8 km, packed into about 2.4 MB of map data (1.8 MB of it needed before the city is shown) and drawn at low resolution with dithered, toon-stepped shaders. There is no framework and no game engine, just TypeScript, [three.js](https://threejs.org/) and Vite. The title screen is interactive after 35 KB of gzipped JavaScript; three.js and the map load behind it.
 
 Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here are original.
 
@@ -155,6 +155,17 @@ From the air the roads are paint in the ground image, at three metres a pixel. N
 
 The detail ladder (`src/shared/detail.ts`) carries two more numbers for all of this, `near` (how far the close-up detail reaches) and `props` (how many small things are drawn). The low tier starts with a shorter reach and no service lanes; the last rung turns close-up detail off.
 
+### The ground up close
+
+The ground image says what colour the land is, at three metres a pixel. That is right from the air and a field of flat squares from fifty metres up, so within about 420 m of the plane the terrain is drawn from what the land *is* instead.
+
+- **The data** is `land.bin.gz` (271 KB), written by the `land` stage: a grid of 6 m cells, each with a class (plain land, residential, commercial, industrial, car park, park, pitch, wood, scrub, sand, rock, water; `src/shared/land.ts`) and a tree-canopy class. Classes come from the same OpenStreetMap areas, painted in the same order, as the ground image, so the two agree. It loads after the first view, with the roads.
+- **Canopy is measured, not guessed.** A cell is canopy where LiDAR's surface stands three metres or more above its ground, away from buildings, carriageways and the sea, and is as rough as foliage: a roof or a stack of containers is high but flat. The thresholds were set from the map itself (nine in ten high cells in mapped woodland are rough over 70% of their area; the container terminal is spread evenly from 0 to 100%), and the result covers 17.8% of the land, close to the 18% that Auckland Council's urban forest surveys report. `npm run map:check` holds it there, and checks that the Domain is green and the container terminal is not.
+- **Drawing it** (`src/render/groundChunks.ts`). The class at a pixel is voted between the four nearest cells from a position that wanders a metre or two (`voteClass`, with a tested copy in `shared/land.ts`), so a park's edge is a soft line and not a staircase. Each class is painted in the ground image's colour for it and broken up the way that kind of land is: tufts in grass, mown stripes on a pitch, plots of lawn and paving in a suburb, bays and parked cars in a car park, slabs in paving, grain in sand. Canopy is a dark, leafy patch with a sunlit edge and a shadow on the ground beyond it.
+- **No seam.** Every pattern varies around the class's own colour, and the hill shading baked into the image is recomputed from the same light, so near and far agree where they meet, behind a dithered edge. Beyond it, canopy tints the painted ground in three dithered steps, which is what makes the suburbs as green from a distance as they really are.
+- **The shoreline.** Near the plane the land ends where the image's edge falls *between* its pixels. The sea reads the same edge from the image's smaller copies, which the sampler smooths, so the foam and the pale shallows follow the shore in bands rather than in three-metre blocks, and a jetty a few metres wide raises no surf.
+- **How it arrives.** The terrain starts with a material that knows only the image, as before. When `land.bin` has loaded, a second material is compiled off-screen and swapped in, and fades up; nothing about it can delay the first view.
+
 ### The plane
 
 One mesh of about ninety coloured boxes (`src/flight/plane.ts`), and one draw call. Each box says which part it belongs to and where that part hinges, and the plane's material (`createPlaneMaterial` in `src/render/materials.ts`) moves the ailerons, elevator, rudder, propeller and boost flame from that in the vertex stage. It is lit by the same sun or moon as the city, with a little light of its own so it never sinks into the night, and carries nav lights, a strobe and a landing light. The registration on the wing is `ZK`, New Zealand's prefix, and the pilot's initials.
@@ -220,7 +231,7 @@ Near the Sky Tower (or from the projects briefing) press E to land inside the po
 
 ### Map pipeline
 
-`npm run map` = `map:fetch` (cached in `$AW_DATA_DIR`, default `./data`; a second run makes 0 network requests; `-- --only=osm|linz`, `--refresh`) then `map:build` (`-- --stage=water,terrain,landmarks,places,buildings,roads,ground,minimap,meta`) then `map:check`. Outputs go to `public/map/`; the report and debug PNGs (water, hillshade, heights, height-sources) go to `$AW_DATA_DIR/work/`.
+`npm run map` = `map:fetch` (cached in `$AW_DATA_DIR`, default `./data`; a second run makes 0 network requests; `-- --only=osm|linz`, `--refresh`) then `map:build` (`-- --stage=water,terrain,landmarks,places,buildings,roads,land,ground,minimap,meta`) then `map:check`. Outputs go to `public/map/`; the report and debug PNGs (water, hillshade, heights, height-sources, land) go to `$AW_DATA_DIR/work/`.
 
 - Sources: OpenStreetMap via Overpass (three endpoints, 2 s spacing, 5/15/45 s backoff, 2x2 split on timeout) and the LINZ Auckland 2024 LiDAR 1 m DEM and DSM (public S3, checksum-verified against the STAC `file:checksum` multihash). Tiles that merely touch the world rectangle are not fetched.
 - **LERC decode path:** the LINZ tiles are Float32 COGs with TIFF compression 34887 (LERC). `geotiff@2.1.3`'s built-in LERC decoder reads them directly (`GeoTIFF.fromFile` + `readRasters` on a window), so the `lerc@4` WASM fallback and GDAL were not needed. Spike check: `BA32_10000_0401` decodes in about 1 s with max 195.743 and mean 21.919, matching its header statistics. `scripts/build/mosaic.ts` reads each tile in 1024-row strips into one 7200 x 8000 Float32 mosaic per kind (nodata becomes NaN); nothing at full resolution is written to disk.

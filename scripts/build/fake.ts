@@ -15,11 +15,13 @@ import {
   type RoadWay,
   MAP_FORMAT_VERSION,
   type TerrainGrid,
+  encodeLand,
   encodeRoads,
   encodeBuildings,
   encodeTerrain,
   sampleTerrain,
 } from '../../src/shared/mapFormat';
+import { CANOPY_LOW, CANOPY_MID, CANOPY_TALL, LAND_CELL, type LandGrid, landCode } from '../../src/shared/land';
 import { ROAD_CLASSES, roadFlags } from '../../src/shared/roads';
 import { GROUND, makeStyle } from '../../src/shared/palette';
 import {
@@ -278,6 +280,26 @@ fakeRoads.sort((a, b) => a.cls - b.cls);
 files['roads.bin.gz'] = writeGz(resolve(out, 'roads.bin.gz'), encodeRoads(fakeRoads));
 const fakeRoadVertices = fakeRoads.reduce((n, r) => n + r.line.length / 2, 0);
 
+// What the land is, to match the picture: park on the three cones and plain land elsewhere, with
+// clumps of trees, thick in the parks and thin outside them, and none in the sea.
+const landW = Math.ceil((BOUNDS.maxX - BOUNDS.minX) / LAND_CELL);
+const landH = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) / LAND_CELL);
+const fakeLand: LandGrid = { width: landW, height: landH, cell: LAND_CELL, cls: new Uint8Array(landW * landH), canopy: new Uint8Array(landW * landH) };
+const clump = (x: number, z: number) => 0.5 + 0.5 * Math.sin(x / 37 + 1.3 * Math.sin(z / 53)) * Math.cos(z / 41 + Math.sin(x / 61));
+for (let r = 0; r < landH; r++) {
+  for (let c = 0; c < landW; c++) {
+    const x = BOUNDS.minX + (c + 0.5) * LAND_CELL;
+    const z = BOUNDS.minZ + (r + 0.5) * LAND_CELL;
+    if (isWater(x, z)) continue;
+    const park = [[mtEden, 420], [domain, 380], [mtVic, 200]].some(([p, radius]) => Math.hypot(x - (p as typeof mtEden).x, z - (p as typeof mtEden).z) < (radius as number));
+    const i = r * landW + c;
+    if (park) fakeLand.cls[i] = landCode('park');
+    const t = clump(x, z);
+    if (t > (park ? 0.6 : 0.9)) fakeLand.canopy[i] = t > 0.97 ? CANOPY_TALL : park ? CANOPY_MID : CANOPY_LOW;
+  }
+}
+files['land.bin.gz'] = writeGz(resolve(out, 'land.bin.gz'), encodeLand(fakeLand));
+
 let minH = Infinity;
 let maxH = -Infinity;
 for (const v of heights) {
@@ -336,7 +358,10 @@ const meta: MapMeta = {
     ['Northcote Point', -36.8205, 174.7465],
     ['Devonport', -36.829, 174.795],
   ].map(([name, lat, lon]) => ({ name: name as string, kind: 'suburb', ...lonLatToLocal(lon as number, lat as number) })),
-  detail: { roads: { file: 'roads.bin.gz', ways: fakeRoads.length, vertices: fakeRoadVertices } },
+  detail: {
+    roads: { file: 'roads.bin.gz', ways: fakeRoads.length, vertices: fakeRoadVertices },
+    land: { file: 'land.bin.gz', width: landW, height: landH, cell: LAND_CELL },
+  },
   files,
 };
 

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-26T02:35:35.204Z",
+ "generatedAt": "2026-11-26T09:28:20.750Z",
  "sources": {
   "osm": {
    "baseTimestamp": "2026-11-04T21:42:19Z"
@@ -747,6 +747,12 @@
    "file": "roads.bin.gz",
    "ways": 10430,
    "vertices": 35857
+  },
+  "land": {
+   "file": "land.bin.gz",
+   "width": 1200,
+   "height": 1334,
+   "cell": 6
   }
  },
  "files": {
@@ -773,6 +779,10 @@
   "roads.bin.gz": {
    "bytes": 120878,
    "sha256": "855441d509fd94ccf180e2ea656ec801d0012f57821d81023be85ed62eeedf8f"
+  },
+  "land.bin.gz": {
+   "bytes": 277789,
+   "sha256": "b94afd7f4b98e21669c7dbc08529180e8c1b306504b33b3d0e2713aff67d309b"
   }
  }
 }

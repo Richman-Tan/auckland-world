@@ -15,7 +15,9 @@ import {
   Vector3,
   Vector4,
 } from 'three';
-import { ACCENTS, type PaletteKey, SKY, WATER, hexToRgb } from '../shared/palette';
+import { LAND_CLASSES, LAND_COLOUR } from '../shared/land';
+import { ACCENTS, GROUND, type PaletteKey, SKY, WATER, hexToRgb } from '../shared/palette';
+import { LAND_LIB, LAND_UNIFORMS } from './groundChunks';
 import { COMMON_UNIFORMS, FRAG_OUT, PIXEL_LIB, VERT_WORLD } from './shaderChunks';
 import type { SharedUniforms } from './uniforms';
 
@@ -61,14 +63,6 @@ uniform vec3 uZenith;
 uniform vec3 uSunColor;
 uniform vec3 uDiscColor;
 uniform float uCloud;
-
-// Smooth value noise from the shared hash, for the cloud bands.
-float vnoise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
-}
 
 void main() {
   vec4 v = uInvProj * vec4(vNdc, 1.0, 1.0);
@@ -127,13 +121,31 @@ void main() {
 
 /* ----------------------------------------------------------------- terrain */
 
-export function createTerrainMaterial(shared: SharedUniforms, ground: Texture): ShaderMaterial {
-  return make(
-    shared,
-    /* glsl */ `
+/** What the close-up ground is drawn from: the land grid as a texture, and where it lies. */
+export interface LandSource {
+  texture: Texture;
+  /** The map's north-west corner. */
+  minX: number;
+  minZ: number;
+  /** Cell size, metres. */
+  cell: number;
+}
+
+/**
+ * The terrain. Without `land` it is the painted ground image and nothing else, which is what is
+ * shown first. With it (the material is swapped once land.bin has loaded) the ground within
+ * uGroundR of the camera is drawn from the land grid instead (groundChunks.ts), behind a dithered
+ * edge, and tree canopy tints the painted ground beyond.
+ */
+export function createTerrainMaterial(shared: SharedUniforms, ground: Texture, land?: LandSource): ShaderMaterial {
+  const vertex = /* glsl */ `
 out vec2 vUv;
-${VERT_WORLD.replace('void main() {', 'void main() {\n  vUv = uv;')}`,
-    /* glsl */ `
+${VERT_WORLD.replace('void main() {', 'void main() {\n  vUv = uv;')}`;
+  if (!land) {
+    return make(
+      shared,
+      vertex,
+      /* glsl */ `
 in vec3 vWorld;
 in vec2 vUv;
 uniform sampler2D uGround;
@@ -146,7 +158,70 @@ void main() {
   float d = length(vWorld - cameraPosition);
   outColor = vec4(pixelFog(c, d, 1.0), 1.0);
 }`,
-    { uGround: { value: ground } },
+      { uGround: { value: ground } },
+    );
+  }
+  return make(
+    shared,
+    vertex,
+    /* glsl */ `
+in vec3 vWorld;
+in vec2 vUv;
+uniform sampler2D uGround;
+${LAND_UNIFORMS}
+${LAND_LIB}
+void main() {
+  // Everything that needs screen-space derivatives is read before the branch below.
+  vec4 t = texture(uGround, vUv);
+  vec2 p = vWorld.xz;
+  vec2 q = (p - uLandGrid.xy) * uLandGrid.z;
+  float canopy = texture(uLand, q / vec2(textureSize(uLand, 0))).g;
+  vec2 fw = fwidth(p);
+  float px = max(max(fw.x, fw.y), 0.0001);
+  vec3 n = flatNormal(vWorld);
+  float d = length(vWorld - cameraPosition);
+  float dither = bayer4(gl_FragCoord.xy);
+
+  float nearK = uGroundR > 1.0 ? uDetail * (1.0 - smoothstep(0.7 * uGroundR, uGroundR, d)) : 0.0;
+  vec3 c;
+  if (nearK > dither) {
+    float shore = shoreAt(uGround, vUv);
+    if (shore < 0.5) discard;
+    // The class is read from a position that wanders a metre or two, so boundaries are not ruled lines.
+    vec2 wander = (vec2(vnoise(p * 0.13), vnoise(p * 0.13 + 23.1)) - 0.5) * 0.55;
+    int cls = voteClass(q + wander);
+    c = landColour(cls, p, px) * hillBand(n);
+    if (cls != ${LAND_CLASSES.indexOf('water')}) {
+      // Canopy, given some height by the light: its sunward edge is bright, and the ground just
+      // beyond its far edge is in its shadow. One more reading, three metres towards the sun.
+      vec2 sunward = normalize(uSunDir.xz + vec2(1e-4, 0.0)) * 3.0;
+      float crown = crownAt(canopy, p);
+      float crownSunward = crownAt(textureLod(uLand, (q + sunward * uLandGrid.z) / vec2(textureSize(uLand, 0)), 0.0).g, p + sunward);
+      c *= 1.0 - 0.24 * (1.0 - crown) * crownSunward;
+      c = mix(c, crownColour(p, px) * (1.0 + 0.2 * (1.0 - crownSunward)), crown);
+    }
+    // The water's edge: a line of wet foam where the land stops.
+    c = mix(c, uShoreCol, step(shore, 0.72));
+  } else {
+    if (t.a < 0.5) discard;
+    // Canopy over the painted ground: three dithered steps of green, by how much of it there is.
+    float cover = smoothstep(0.2, 0.8, canopy);
+    c = mix(t.rgb, uCanopyCol, 0.85 * uDetail * floor(cover * 3.0 + dither) / 3.0);
+  }
+  vec3 lit = mix(uAmbient, lambert3(n), 0.45);
+  c *= lit * planeShadow(vWorld);
+  outColor = vec4(pixelFog(c, d, 1.0), 1.0);
+}`,
+    {
+      uGround: { value: ground },
+      uLand: { value: land.texture },
+      uLandGrid: { value: new Vector4(land.minX, land.minZ, 1 / land.cell, 0) },
+      uGroundR: { value: 0 },
+      uDetail: { value: 0 },
+      uLandCol: { value: LAND_CLASSES.map((k) => col(GROUND[LAND_COLOUR[k]])) },
+      uCanopyCol: { value: col(GROUND.canopy) },
+      uShoreCol: { value: col(GROUND.foam) },
+    },
   );
 }
 
@@ -175,7 +250,13 @@ void main() {
 
 /* ------------------------------------------------------------------- water */
 
-export function createWaterMaterial(shared: SharedUniforms, ground: Texture, rect: Vector4): ShaderMaterial {
+/**
+ * The sea. Where the land is comes from the ground image's alpha, read from its smaller copies
+ * (`shoreLod`: the level whose pixels are about six metres), which the sampler blends between their
+ * pixels: so the foam and the pale shallows follow the shore as smooth bands rather than as the
+ * image's squares.
+ */
+export function createWaterMaterial(shared: SharedUniforms, ground: Texture, rect: Vector4, shoreLod = 1): ShaderMaterial {
   return make(
     shared,
     VERT_WORLD,
@@ -187,12 +268,7 @@ uniform vec3 uDeep;
 uniform vec3 uShallow;
 uniform vec3 uFoam;
 uniform vec3 uSparkle;
-
-float land(vec2 xz) {
-  vec2 uv = (xz - uRect.xy) / uRect.zw;
-  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  return textureLod(uGround, uv, 0.0).a;
-}
+uniform float uShoreLod;
 
 void main() {
   vec2 p = vWorld.xz;
@@ -208,20 +284,32 @@ void main() {
   w = w / 2.6;
   float q = floor(w * 2.0 + 2.0) / 4.0;
 
-  // shallow tint and foam from the ground texture alpha (land = 1)
+  // How much land is close by: within a few metres (nearL) and within fifteen or so (farL), each
+  // rising smoothly from 0 out at sea to about a half at the shoreline.
   float nearL = 0.0;
   float farL = 0.0;
-  if (dist < 2400.0) {
-    nearL = (land(p + vec2(6.0, 0.0)) + land(p + vec2(-6.0, 0.0)) + land(p + vec2(0.0, 6.0)) + land(p + vec2(0.0, -6.0))) * 0.25;
-    farL = (land(p + vec2(16.0, 6.0)) + land(p + vec2(-16.0, -6.0)) + land(p + vec2(-6.0, 16.0)) + land(p + vec2(6.0, -16.0))) * 0.25;
+  // Read from a position that wanders a few metres, so the bands are not the sampler's straight lines.
+  vec2 sway = (vec2(vnoise(p * 0.06), vnoise(p * 0.06 + 7.3)) - 0.5) * 7.0;
+  vec2 uv = (p + sway - uRect.xy) / uRect.zw;
+  if (dist < 2400.0 && uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) {
+    nearL = textureLod(uGround, uv, uShoreLod).a;
+    farL = textureLod(uGround, uv, uShoreLod + 1.6).a;
   }
+  float dither = bayer4(gl_FragCoord.xy);
   vec3 c = mix(uDeep, uShallow, 0.30 + 0.45 * q);
-  c = mix(c, uShallow * 1.08, clamp(farL * 1.2 + nearL * 0.6, 0.0, 0.8));
+  // The shallows: paler in three dithered steps towards the shore.
+  float shallow = clamp(farL * 1.7 + nearL * 0.3, 0.0, 0.8);
+  c = mix(c, uShallow * 1.08, floor(shallow * 3.0 + dither) / 3.0);
 
-  // foam: a solid fringe at the shore and a moving band just outside it
+  // Foam: a solid fringe at the shore that the swell pushes in and out a little, and a faint
+  // moving band just outside it.
   float band = step(0.35, sin((p.x + p.y) * 0.05 - t * 1.4) * 0.5 + 0.5);
-  // a thin solid fringe, and a faint moving band just outside it
-  float foam = step(0.05, nearL) + (1.0 - step(0.05, nearL)) * step(0.05, farL) * band * 0.45;
+  float lap = 0.1 + 0.04 * sin(t * 0.8 + p.x * 0.07 + p.y * 0.05);
+  // Only against real shore: a jetty or a pontoon a few metres wide is land in the image but has
+  // no surf, and shows up here as very little land in the wider reading.
+  float shore = step(0.2, farL);
+  float fringe = step(lap, nearL) * shore;
+  float foam = fringe + (1.0 - fringe) * shore * band * 0.45;
   foam *= 1.0 - smoothstep(1400.0, 2400.0, dist);
   c = mix(c, uFoam * uAmbient, clamp(foam, 0.0, 1.0));
 
@@ -248,6 +336,7 @@ void main() {
       uShallow: { value: col(WATER.shallow) },
       uFoam: { value: col(WATER.foam) },
       uSparkle: { value: col(WATER.sparkle) },
+      uShoreLod: { value: shoreLod },
     },
   );
 }
@@ -446,15 +535,6 @@ flat in vec4 vInfo;
 uniform float uRibbonR;
 uniform float uDetail;
 const float LANE = 3.3;
-
-// How much of a pixel a painted line covers: half-width w, d metres from its centre, px metres a pixel.
-float painted(float d, float w, float px) {
-  return min(clamp((w + 0.5 * px - abs(d)) / px, 0.0, 1.0), min(1.0, 2.0 * w / px));
-}
-// A repeating pattern fades to nothing as its period shrinks towards a pixel.
-float keep(float px, float period) {
-  return 1.0 - smoothstep(0.22, 0.5, px / period);
-}
 
 void main() {
   float dist = length(vWorld - cameraPosition);

@@ -7,6 +7,7 @@ import { content } from '../../src/content';
 import { placeStops } from '../../src/app/placement';
 import {
   decodeBuildings,
+  decodeLand,
   decodeRoads,
   decodeTerrain,
   isMapMeta,
@@ -15,6 +16,7 @@ import {
   sampleTerrain,
   type MapMeta,
 } from '../../src/shared/mapFormat';
+import { CANOPY_TALL, LAND_CLASSES, landCellAt } from '../../src/shared/land';
 import { PUBLIC_MAP_DIR } from '../config';
 import { sha256 } from '../lib/io';
 import { WORK } from '../lib/paths';
@@ -81,6 +83,42 @@ if (meta.detail?.roads) {
   check('road network length', within(km, 400, 1400), `${km.toFixed(0)} km`);
   check('roads inside bounds', out === 0, `${out} vertices outside`);
   check('no absurd road segment', longest < 1500, `longest segment ${longest.toFixed(0)} m`);
+}
+if (meta.detail?.land) {
+  const l = meta.detail.land;
+  check('land budget', size(l.file) <= 320 * 1024, kb(size(l.file)));
+  const land = decodeLand(new Uint8Array(gunzipSync(readFileSync(resolve(PUBLIC_MAP_DIR, l.file)))));
+  check('land grid matches meta', land.width === l.width && land.height === l.height && land.cell === l.cell, `${land.width}x${land.height} at ${land.cell} m`);
+  const covers = land.width * land.cell >= meta.bounds.maxX - meta.bounds.minX && land.height * land.cell >= meta.bounds.maxZ - meta.bounds.minZ;
+  check('land grid covers the map', covers, `${land.width * land.cell} x ${land.height * land.cell} m`);
+  let badClass = 0, badCanopy = 0, canopy = 0, seaCanopy = 0, landCells = 0;
+  const sea6 = downsampleMajority(loadWater().mask, 4);
+  for (let i = 0; i < land.cls.length; i++) {
+    if (land.cls[i] >= LAND_CLASSES.length) badClass++;
+    if (land.canopy[i] > CANOPY_TALL) badCanopy++;
+    const wet = sea6.w === land.width && sea6.data[i] === 1;
+    if (!wet) landCells++;
+    if (land.canopy[i]) {
+      canopy++;
+      if (wet) seaCanopy++;
+    }
+  }
+  check('land classes valid', badClass === 0 && badCanopy === 0, `${badClass} bad classes, ${badCanopy} bad canopy values`);
+  check('no trees in the sea', seaCanopy === 0, `${seaCanopy} canopy cells at sea`);
+  // Auckland's urban canopy is a little under a fifth of the land; far from that means the LiDAR test has broken.
+  const share = canopy / Math.max(1, landCells);
+  check('tree canopy share', within(share, 0.1, 0.28), `${(share * 100).toFixed(1)}% of the land`);
+  const at = (lat: number, lon: number) => {
+    const p = latLonToLocal(meta.geo, lat, lon);
+    return LAND_CLASSES[land.cls[landCellAt(land, meta.bounds.minX, meta.bounds.minZ, p.x, p.z)]];
+  };
+  const domain = at(-36.8590, 174.7755);
+  check('the Domain is green', domain === 'park' || domain === 'pitch' || domain === 'wood', domain ?? 'outside the grid');
+  const terminal = latLonToLocal(meta.geo, -36.8437, 174.7850);
+  let stacks = 0;
+  for (let dz = -150; dz <= 150; dz += 6) for (let dx = -150; dx <= 150; dx += 6) if (land.canopy[landCellAt(land, meta.bounds.minX, meta.bounds.minZ, terminal.x + dx, terminal.z + dz)]) stacks++;
+  // Without the roughness test about a fifth of the terminal reads as canopy.
+  check('container stacks are not trees', stacks < 2601 * 0.03, `${stacks} canopy cells of 2601 on the container terminal`);
 }
 
 /* ---- buildings */

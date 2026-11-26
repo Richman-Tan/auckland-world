@@ -6,6 +6,8 @@
  * World frame: NZTM2000-local metres. x = E - originE (east), z = -(N - originN)
  * (so north is -z), y = up, metres above sea level. All binary data is little-endian.
  */
+import type { LandGrid } from './land';
+
 
 export const MAP_FORMAT_VERSION = 1;
 
@@ -84,6 +86,8 @@ export interface MapMeta {
   detail?: {
     /** Road and rail centre lines (roads.bin). */
     roads?: { file: string; ways: number; vertices: number };
+    /** What the ground is, cell by cell, and the tree canopy over it (land.bin). */
+    land?: { file: string; width: number; height: number; cell: number };
   };
   files: Record<string, FileEntry>;
 }
@@ -553,6 +557,63 @@ export function encodeRoads(list: readonly RoadWay[]): Uint8Array {
   }
   w.pad4();
   return w.bytes();
+}
+
+/* ------------------------------------------------------------------ land.bin */
+
+/**
+ * land.bin ("AWL1"): u16 version, u16 cell size in decimetres, u32 width, u32 height, then two
+ * planes of width x height bytes, each padded to four: the class of every cell and its canopy class
+ * (src/shared/land.ts). Every row is stored as its difference (XOR) from the row above, which is
+ * mostly zeros and so packs to a fraction of the size.
+ */
+function xorRows(plane: Uint8Array, width: number, undo: boolean): Uint8Array {
+  const out = new Uint8Array(plane.length);
+  for (let i = 0; i < plane.length; i++) {
+    const above = i >= width ? (undo ? out[i - width] : plane[i - width]) : 0;
+    out[i] = plane[i] ^ above;
+  }
+  return out;
+}
+
+export function encodeLand(g: LandGrid): Uint8Array {
+  const n = g.width * g.height;
+  if (g.cls.length !== n || g.canopy.length !== n) throw new Error('land.bin: planes do not match the grid');
+  const w = new Writer(24 + n * 2);
+  w.magic('AWL1');
+  w.u16(MAP_FORMAT_VERSION);
+  w.u16(Math.round(g.cell * 10));
+  w.u32(g.width);
+  w.u32(g.height);
+  for (const plane of [g.cls, g.canopy]) {
+    const rows = xorRows(plane, g.width, false);
+    for (let i = 0; i < n; i++) w.u8v(rows[i]);
+    w.pad4();
+  }
+  return w.bytes();
+}
+
+export function decodeLand(bytes: Uint8Array): LandGrid {
+  const r = new Reader(bytes);
+  r.check(16);
+  r.magic('AWL1');
+  const version = r.u16();
+  if (version !== MAP_FORMAT_VERSION) throw new Error(`land.bin version ${version} unsupported`);
+  const cell = r.u16() / 10;
+  const width = r.u32();
+  const height = r.u32();
+  const n = width * height;
+  if (!(cell > 0) || n <= 0 || n > 64e6) throw new Error('land.bin: bad grid size');
+  r.check(n * 2);
+  const plane = () => {
+    const raw = new Uint8Array(n);
+    for (let i = 0; i < n; i++) raw[i] = r.u8v();
+    r.pad4();
+    return xorRows(raw, width, true);
+  };
+  const cls = plane();
+  const canopy = plane();
+  return { width, height, cell, cls, canopy };
 }
 
 export function decodeRoads(bytes: Uint8Array): RoadsData {

@@ -3,15 +3,21 @@ import {
   BufferAttribute,
   BufferGeometry,
   type Camera,
+  ClampToEdgeWrapping,
+  DataTexture,
   DynamicDrawUsage,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   type Object3D,
   PerspectiveCamera,
   PlaneGeometry,
+  RGFormat,
   Scene,
   type ShaderMaterial,
   Sphere,
   type Texture,
+  UnsignedByteType,
   Vector3,
   Vector4,
 } from 'three';
@@ -22,7 +28,7 @@ import { FOG_FAR, NEAR_RADIUS } from '../shared/detail';
 import type { MapMeta } from '../shared/mapFormat';
 import type { Look } from '../shared/timeOfDay';
 import { type Ambient, createAmbient } from '../world/ambient';
-import type { DetailOutput } from '../world/buildDetail';
+import type { DetailOutput, LandImage } from '../world/buildDetail';
 import type { BuildOutput } from '../world/buildWorld';
 import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
@@ -93,6 +99,10 @@ export class WorldSceneImpl implements WorldScene {
   private near = 1;
   private disposed = false;
   private ribbons: { mesh: Mesh; material: ShaderMaterial; geometry: BufferGeometry; index: BufferAttribute; data: RibbonMesh; set: NearSet; fade: number } | null = null;
+  /** The terrain and its ground image, kept so the close-up ground can take the terrain over once it has loaded. */
+  private terrain: Mesh;
+  private groundImage: Texture;
+  private land: { material: ShaderMaterial; fade: number } | null = null;
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
@@ -131,6 +141,8 @@ export class WorldSceneImpl implements WorldScene {
     const terrain = new Mesh(terrainGeo, track(createTerrainMaterial(sh, ground)));
     terrain.name = 'terrain';
     this.scene.add(terrain);
+    this.terrain = terrain;
+    this.groundImage = ground;
     const outGeo = track(meshGeometry(parts.built.outskirts));
     const outskirts = new Mesh(outGeo, track(createOutskirtsMaterial(sh, ground)));
     outskirts.name = 'outskirts';
@@ -140,7 +152,10 @@ export class WorldSceneImpl implements WorldScene {
     const b = meta.bounds;
     const rect = new Vector4(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
     const waterGeo = track(new PlaneGeometry(30000, 30000).rotateX(-Math.PI / 2));
-    const water = new Mesh(waterGeo, track(createWaterMaterial(sh, ground, rect)));
+    // The level of the ground image whose pixels are about six metres (never the full-size one,
+    // which is read unsmoothed).
+    const groundMpp = rect.z / Math.max(1, (ground.image as { width?: number } | null)?.width ?? meta.ground.width);
+    const water = new Mesh(waterGeo, track(createWaterMaterial(sh, ground, rect, Math.max(0.6, Math.log2(6 / groundMpp)))));
     water.position.set(0, meta.water.level, 0);
     water.frustumCulled = false;
     water.renderOrder = 10;
@@ -217,8 +232,38 @@ export class WorldSceneImpl implements WorldScene {
   }
 
   private async installDetail(d: DetailOutput): Promise<void> {
-    if (this.disposed || !d.ribbons || d.ribbons.indices.length === 0) return;
-    const data = d.ribbons;
+    await Promise.all([d.land ? this.installLand(d.land) : undefined, d.ribbons ? this.installRibbons(d.ribbons) : undefined]);
+  }
+
+  /** The close-up ground: the terrain's material is replaced by the one that reads the land grid. */
+  private async installLand(land: LandImage): Promise<void> {
+    if (this.disposed) return;
+    const texture = new DataTexture(land.pixels, land.width, land.height, RGFormat, UnsignedByteType);
+    texture.unpackAlignment = 1;
+    texture.wrapS = ClampToEdgeWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    // Smoothed for the canopy channel; the class channel is read cell by cell in the shader.
+    texture.magFilter = LinearFilter;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+    const b = this.meta.bounds;
+    const material = createTerrainMaterial(this.shared, this.groundImage, { texture, minX: b.minX, minZ: b.minZ, cell: land.cell });
+    // Compiled on a stand-in first, so the swap costs the frame it happens on nothing.
+    const cam = new PerspectiveCamera(60, 16 / 9, 0.5, 3500);
+    await this.renderer.compileAsync(new Mesh(this.terrain.geometry, material), cam, this.scene);
+    if (this.disposed) {
+      texture.dispose();
+      material.dispose();
+      return;
+    }
+    this.disposables.push(texture, material);
+    this.terrain.material = material;
+    this.land = { material, fade: 0 };
+  }
+
+  private async installRibbons(data: RibbonMesh): Promise<void> {
+    if (this.disposed || data.indices.length === 0) return;
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
     geometry.setAttribute('aAcross', new BufferAttribute(data.across, 1));
@@ -293,6 +338,13 @@ export class WorldSceneImpl implements WorldScene {
         r.index.addUpdateRange(0, n);
         r.index.needsUpdate = true;
       }
+    }
+    // The close-up ground fades in the same way, and reaches as far as the detail level allows.
+    if (this.land) {
+      const l = this.land;
+      l.fade = Math.min(1, l.fade + dt / 0.9);
+      l.material.uniforms.uDetail.value = l.fade;
+      l.material.uniforms.uGroundR.value = NEAR_RADIUS.ground * this.near;
     }
     // Rangitoto: scaled towards the camera so it sits inside the far plane at the same angular size.
     const base = this.rangitotoBase;

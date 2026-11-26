@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { decodeBuildings } from '../../src/shared/mapFormat';
+import { LAND_COLOUR, type LandClass } from '../../src/shared/land';
 import { hexToRgb, GROUND } from '../../src/shared/palette';
 import { BOUNDS, GROUND_LO_MPP, GROUND_MPP, PUBLIC_MAP_DIR } from '../config';
 import { writeFile } from '../lib/io';
@@ -19,21 +20,25 @@ export const GH = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) / GROUND_MPP); // 2667
 /* ------------------------------------------------------------------ OSM layers */
 
 type AreaLayer = 2 | 3 | 4 | 5 | 10;
-interface AreaFeature { layer: AreaLayer; color: string; polys: Polygon[]; area: number }
+interface AreaFeature { layer: AreaLayer; color: string; kind: LandClass; polys: Polygon[]; area: number }
 
-function classifyArea(t: Record<string, string>): { layer: AreaLayer; color: string } | null {
+/** The layer an area is painted in, its colour, and what kind of land it is (for land.bin). */
+function classifyArea(t: Record<string, string>): { layer: AreaLayer; color: string; kind: LandClass } | null {
   const lu = t.landuse, le = t.leisure, na = t.natural, am = t.amenity;
-  if (na === 'wood' || lu === 'forest') return { layer: 4, color: GROUND.wood };
-  if (na === 'scrub' || na === 'heath' || na === 'wetland') return { layer: 4, color: GROUND.scrub };
-  if (le === 'golf_course') return { layer: 4, color: GROUND.pitch };
-  if (na === 'beach' || na === 'sand') return { layer: 5, color: GROUND.sand };
-  if (na === 'bare_rock') return { layer: 5, color: GROUND.rock };
-  if (le === 'pitch' || le === 'track' || le === 'stadium') return { layer: 3, color: GROUND.pitch };
-  if (le === 'park' || le === 'garden' || le === 'playground' || le === 'nature_reserve' || na === 'grassland') return { layer: 3, color: GROUND.park };
-  if (lu === 'grass' || lu === 'recreation_ground' || lu === 'meadow' || lu === 'village_green' || lu === 'cemetery' || lu === 'orchard' || lu === 'allotments') return { layer: 3, color: GROUND.park };
-  if (lu === 'residential') return { layer: 2, color: GROUND.residential };
-  if (lu === 'commercial' || lu === 'retail' || am === 'school' || am === 'university' || am === 'hospital') return { layer: 2, color: GROUND.commercial };
-  if (lu === 'industrial' || lu === 'railway' || lu === 'construction' || am === 'parking') return { layer: 2, color: GROUND.industrial };
+  const as = (layer: AreaLayer, kind: LandClass) => ({ layer, kind, color: GROUND[LAND_COLOUR[kind]] });
+  if (na === 'wood' || lu === 'forest') return as(4, 'wood');
+  if (na === 'scrub' || na === 'heath' || na === 'wetland') return as(4, 'scrub');
+  if (le === 'golf_course') return as(4, 'pitch');
+  if (na === 'beach' || na === 'sand') return as(5, 'sand');
+  if (na === 'bare_rock') return as(5, 'rock');
+  if (le === 'pitch' || le === 'track' || le === 'stadium') return as(3, 'pitch');
+  if (le === 'park' || le === 'garden' || le === 'playground' || le === 'nature_reserve' || na === 'grassland') return as(3, 'park');
+  if (lu === 'grass' || lu === 'recreation_ground' || lu === 'meadow' || lu === 'village_green' || lu === 'cemetery' || lu === 'orchard' || lu === 'allotments') return as(3, 'park');
+  if (lu === 'residential') return as(2, 'residential');
+  if (lu === 'commercial' || lu === 'retail' || am === 'school' || am === 'university' || am === 'hospital') return as(2, 'commercial');
+  // A car park open to the sky is its own kind of land; one under ground or in a building is not.
+  if (am === 'parking' && t.parking !== 'underground' && t.parking !== 'multi-storey' && lu !== 'industrial') return as(2, 'parking');
+  if (lu === 'industrial' || lu === 'railway' || lu === 'construction' || am === 'parking') return as(2, 'industrial');
   return null;
 }
 

@@ -60,6 +60,23 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
+// Smooth value noise, 0 to 1, one feature per unit of p.
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// How much of a pixel a painted line covers: half-width w, d metres from its centre, px metres a pixel.
+float painted(float d, float w, float px) {
+  return min(clamp((w + 0.5 * px - abs(d)) / px, 0.0, 1.0), min(1.0, 2.0 * w / px));
+}
+// A repeating pattern fades to nothing as its period shrinks towards a pixel, so it cannot sparkle.
+float keep(float px, float period) {
+  return 1.0 - smoothstep(0.22, 0.5, px / period);
+}
+
 // The plane's shadow on whatever is being drawn: 1 where there is none, less inside it.
 // It is worked out here rather than drawn as a shape on the ground, so it lies correctly on roofs,
 // the bridge deck and the water alike. The point is carried along the light to the plane of the
