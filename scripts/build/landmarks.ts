@@ -109,7 +109,7 @@ export async function buildLandmarks(): Promise<{ landmarks: Landmarks; report: 
   const vx = dx / len, vz = dz / len; // a -> b
   const nx = -vz, nz = vx;
   const samples = Math.floor(len / STEP) + 1;
-  const deckY: number[] = [], topY: number[] = [];
+  const deckY: number[] = [], topY: number[] = [], underY: number[] = [];
   for (let i = 0; i < samples; i++) {
     const cx = a.x + vx * i * STEP, cz = a.z + vz * i * STEP;
     const inStrip = (x: number, z: number) => {
@@ -121,6 +121,9 @@ export async function buildLandmarks(): Promise<{ landmarks: Landmarks; report: 
     // The truss rises over the middle lanes, so the plain strip median reads steel at the crown. The deck
     // is taken from the outer clip-on lanes (|across| 11-15 m), falling back to the whole strip.
     const outer = await window('dsm', cx, cz, 25, 25, (x, z) => inStrip(x, z) && across(x, z) > 11 && across(x, z) <= 15);
+    // What lies under the bridge here: the bare-earth model, which reads below zero over the sea.
+    const bare = await window('dem', cx, cz, 25, 25, (x, z) => inStrip(x, z) && across(x, z) <= 15);
+    underY.push(bare.length ? Math.max(0, Math.round(median(bare) * 10) / 10) : 0);
     if (!vals.length) { deckY.push(i ? deckY[i - 1] : 0); topY.push(i ? topY[i - 1] : 0); continue; }
     deckY.push(Math.round(median(outer.length >= 8 ? outer : vals) * 10) / 10);
     topY.push(Math.round(Math.max(...vals) * 10) / 10);
@@ -146,6 +149,7 @@ export async function buildLandmarks(): Promise<{ landmarks: Landmarks; report: 
       step: STEP,
       deckY,
       topY,
+      groundY: underY,
       archTop: { x: round1(archTop.x), z: round1(archTop.z), y: archTop.y },
     },
     rangitoto: { x: round1(rp.x), z: round1(rp.z), summitY: 260, baseRadius: 2800 },

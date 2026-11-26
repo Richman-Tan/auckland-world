@@ -98,27 +98,25 @@ export function landmarkColliders(meta: MapMeta): Collider[] {
       const deck = m.deckAt(sm);
       const { x: cx, z: cz } = m.at(sm, 0);
       const hu = (s1 - s0) / 2 + 0.5;
-      out.push({ kind: 'box', name: 'Harbour Bridge deck', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.deckHalfWidth, y0: deck - HARBOUR_BRIDGE.deckThickness, y1: deck + 1 });
+      // The road and everything hung under it: the truss, or the viaduct's girders.
+      const under = Math.min(m.bottomAt(s0), m.bottomAt(sm), m.bottomAt(s1));
+      out.push({ kind: 'box', name: 'Harbour Bridge deck', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.deckHalfWidth, y0: under, y1: deck + 1.2 });
       // The truss is one run of stations; a segment has it if both its ends do.
       if (m.isTruss(i) && m.isTruss(i + 1)) {
         out.push({ kind: 'box', name: 'Harbour Bridge truss', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.trussHalfWidth, y0: deck + 1, y1: Math.max(m.topY[i], m.topY[i + 1]) });
       }
     }
-    for (const f of HARBOUR_BRIDGE.pierFractions) {
-      const s = f * m.length;
+    for (const pier of m.piers) {
+      const { x: cx, z: cz } = m.at(pier.s, 0);
+      // Two legs from the sea bed, and the beam across their tops that the truss and the clip-ons sit on.
+      const top = m.bottomAt(pier.s);
+      const cap = top - HARBOUR_BRIDGE.pierCapHeight;
+      out.push({ kind: 'box', name: 'Harbour Bridge pier', cx, cz, ux, uz, hu: HARBOUR_BRIDGE.pierHalfLength, hv: HARBOUR_BRIDGE.pierHalfWidth, y0: -10, y1: cap });
+      out.push({ kind: 'box', name: 'Harbour Bridge pier cap', cx, cz, ux, uz, hu: HARBOUR_BRIDGE.pierCapHalfLength, hv: HARBOUR_BRIDGE.deckHalfWidth, y0: cap, y1: top + 0.5 });
+    }
+    for (const s of m.bents) {
       const { x: cx, z: cz } = m.at(s, 0);
-      out.push({
-        kind: 'box',
-        name: 'Harbour Bridge pier',
-        cx,
-        cz,
-        ux,
-        uz,
-        hu: HARBOUR_BRIDGE.pierHalfLength,
-        hv: HARBOUR_BRIDGE.pierHalfWidth,
-        y0: -10,
-        y1: m.deckAt(s) - HARBOUR_BRIDGE.deckThickness,
-      });
+      out.push({ kind: 'box', name: 'Harbour Bridge columns', cx, cz, ux, uz, hu: HARBOUR_BRIDGE.bentHalfLength, hv: HARBOUR_BRIDGE.bentHalfWidth, y0: m.groundAt(s) - 3, y1: m.bottomAt(s) + 0.5 });
     }
   }
   return out;

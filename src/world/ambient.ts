@@ -8,7 +8,7 @@ import type { QualityTier } from '../app/contracts';
 import { type Box, VERTS_PER_BOX, mergeBoxes } from '../render/boxes';
 import { createAmbientMaterial } from '../render/materials';
 import type { SharedUniforms } from '../render/uniforms';
-import { BRIDGE_LANES_FIT, bridgeCar, bridgeGeometry, ferryPaths, shuttleAt } from '../shared/ambientPaths';
+import { BRIDGE_CAR_HALF_WIDTH, BRIDGE_LANES_FIT, bridgeCar, bridgeGeometry, ferryPaths, shuttleAt } from '../shared/ambientPaths';
 import type { WorldQuery } from '../shared/collision';
 import type { MapMeta } from '../shared/mapFormat';
 
@@ -38,6 +38,8 @@ const CAR: readonly Part[] = [
   [2.6, 0.9, 0.7, 0, 1.0, -2.75, 0xfff6c9, GLOW_WHITE], // headlights
   [2.6, 0.9, 0.7, 0, 1.0, 2.75, 0x7a1c1c, GLOW_RED], // tail lights
 ];
+/** The car model is 2.6 m wide; this is the scale that makes it as wide as the lanes were checked for. */
+const BRIDGE_CAR_SCALE = (BRIDGE_CAR_HALF_WIDTH * 2) / 2.6;
 const CAR_PAINT = ['#e9efe6', '#c9c2b4', '#2a9d8f', '#d7263d', '#3a3d42', '#f2c230', '#6f8a94', '#8b6a55'] as const;
 
 function model(parts: readonly Part[]) {
@@ -103,7 +105,8 @@ export function createAmbient(meta: MapMeta, query: WorldQuery, shared: SharedUn
   const hb = meta.landmarks.harbourBridge;
   if (BRIDGE_LANES_FIT && hb.deckY.length > 1) {
     const bridge = bridgeGeometry(hb);
-    const count = quality === 'low' ? 16 : 36;
+    // Eight lanes now: enough cars that none of them looks empty.
+    const count = quality === 'low' ? 24 : 56;
     const geo = model(CAR);
     const mesh = new InstancedMesh(geo, material, count);
     mesh.name = 'bridge-traffic';
@@ -126,8 +129,9 @@ export function createAmbient(meta: MapMeta, query: WorldQuery, shared: SharedUn
         const p = bridge.at(bridge.road.from + car.s, car.lateral);
         dummy.position.set(p.x, p.y, p.z);
         dummy.rotation.set(0, -(car.forward ? bridge.heading : bridge.heading + Math.PI), 0);
-        // Larger than life, like the bridge's own members, so a car is still a few pixels from the air.
-        dummy.scale.setScalar(1.3);
+        // Larger than life, like the bridge's own members, so a car is still a few pixels from the air,
+        // and no larger than a lane and the gap to the truss allow (BRIDGE_CAR_HALF_WIDTH).
+        dummy.scale.setScalar(BRIDGE_CAR_SCALE);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
       }

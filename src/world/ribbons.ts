@@ -9,8 +9,9 @@
  * The triangles are grouped by the map tile their segment falls in. Only the tiles near the camera
  * are ever drawn (see nearSet.ts), so the whole network costs a few thousand triangles a frame.
  */
-import type { Bounds, RoadsData } from '../shared/mapFormat';
-import { RAIL, ROAD_ONEWAY, carriagewayHalfWidth, footpathWidth, lanesOf } from '../shared/roads';
+import { bridgeModel } from '../shared/bridge';
+import type { Bounds, MapMeta, RoadsData } from '../shared/mapFormat';
+import { LANE_WIDTH, RAIL, ROAD_CLASSES, ROAD_ONEWAY, carriagewayHalfWidth, footpathWidth, lanesOf } from '../shared/roads';
 
 export interface RibbonMesh {
   positions: Float32Array;
@@ -41,7 +42,53 @@ export const INFO_ONEWAY = 1;
 /** Line markings are painted here (off close to a way's ends, where it meets other roads). */
 export const INFO_MARKED = 2;
 
+/**
+ * A strip given outright instead of being laid on the ground: the lanes on a bridge deck. Each
+ * station is the middle of the strip, its height, the unit vector across it (towards positive
+ * `across`) and how far along it is.
+ */
+export interface Strip {
+  cls: number;
+  lanes: number;
+  oneway: boolean;
+  /** Half the sealed width. */
+  half: number;
+  stations: { x: number; y: number; z: number; nx: number; nz: number; along: number }[];
+}
+
+/** The painted deck sits this far above the bridge's road slab. */
+export const BRIDGE_STRIP_LIFT = 0.2;
+/** Where the middle of each clip-on's two lanes runs, metres from the bridge's centreline. */
+export const BRIDGE_CLIP_ON_CENTRE = 13.5;
+
+/**
+ * The Harbour Bridge's eight lanes as three strips on its deck: the four original lanes between
+ * the trusses, two-way, and the two lanes of each clip-on outside them. The lane centres these
+ * give are BRIDGE_LANES in shared/ambientPaths.ts, which is where the traffic drives.
+ */
+export function bridgeStrips(hb: MapMeta['landmarks']['harbourBridge']): Strip[] {
+  const m = bridgeModel(hb);
+  if (m.stations < 2 || m.span.last <= m.span.first) return [];
+  const motorway = ROAD_CLASSES.indexOf('motorway');
+  const strip = (lateral: number, lanes: number, oneway: boolean, half: number): Strip => {
+    const stations: Strip['stations'] = [];
+    for (let i = m.span.first; i <= m.span.last; i++) {
+      const s = Math.min(i * m.step, m.length);
+      const p = m.at(s, lateral);
+      stations.push({ x: p.x, y: p.y + BRIDGE_STRIP_LIFT, z: p.z, nx: m.vx, nz: m.vz, along: s - m.span.first * m.step });
+    }
+    return { cls: motorway, lanes, oneway, half, stations };
+  };
+  return [
+    strip(0, 4, false, 2 * LANE_WIDTH + 0.5),
+    strip(-BRIDGE_CLIP_ON_CENTRE, 2, true, LANE_WIDTH + 0.2),
+    strip(BRIDGE_CLIP_ON_CENTRE, 2, true, LANE_WIDTH + 0.2),
+  ];
+}
+
 export interface RibbonOptions {
+  /** Strips to add as they are, after the roads. */
+  strips?: readonly Strip[];
   /** Longest stretch between two stations, metres: short enough to follow the ground. */
   maxStep?: number;
   tileSize?: number;
@@ -185,6 +232,33 @@ export function buildRibbons(roads: RoadsData, heightAt: (x: number, z: number) 
       const t = perTile[tileOf(tiles, (sx[k] + sx[k + 1]) / 2, (sz[k] + sz[k + 1]) / 2)];
       // Wound to face up (the left vertex is the one at negative across).
       t.push(l0, r0, l1, r0, r1, l1);
+    }
+  }
+
+  for (const strip of opts.strips ?? []) {
+    const n = strip.stations.length;
+    if (n < 2) continue;
+    const base = pos.length / 3;
+    const total = strip.stations[n - 1].along;
+    for (const st of strip.stations) {
+      const marked = st.along > junction && total - st.along > junction ? INFO_MARKED : 0;
+      for (const side of [-1, 1]) {
+        pos.push(st.x + st.nx * strip.half * side, st.y, st.z + st.nz * strip.half * side);
+        across.push(strip.half * side);
+        along.push(st.along);
+        half.push(strip.half);
+        info.push(strip.cls, strip.lanes, (strip.oneway ? INFO_ONEWAY : 0) | marked, 0);
+      }
+    }
+    for (let k = 0; k < n - 1; k++) {
+      const l0 = base + k * 2;
+      const a = strip.stations[k];
+      const b = strip.stations[k + 1];
+      // The triangles must face up whichever way the strip runs.
+      const up = (b.x - a.x) * a.nz - (b.z - a.z) * a.nx > 0;
+      const t = perTile[tileOf(tiles, (a.x + b.x) / 2, (a.z + b.z) / 2)];
+      if (up) t.push(l0, l0 + 1, l0 + 2, l0 + 1, l0 + 3, l0 + 2);
+      else t.push(l0, l0 + 2, l0 + 1, l0 + 1, l0 + 2, l0 + 3);
     }
   }
 

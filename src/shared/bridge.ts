@@ -9,6 +9,12 @@
  * pieces of truss along the approaches and put colliders on them. Here the bridge ends at its
  * abutments, the deck between them is one smooth rise and fall, and the truss is the single run
  * that contains the arch.
+ *
+ * The structure under the road comes from here too. The steel bridge proper runs from shore to
+ * shore (1,020 m on the real map, which is its real length) on six piers: four under the southern
+ * approach spans and the two that carry the 244 m navigation span. Its truss hangs below the road,
+ * deepest at those two piers and arching up to almost nothing at mid-span, which is what leaves
+ * 43 m for shipping. Beyond the shores the road is a plain viaduct on rows of columns.
  */
 import type { MapMeta } from './mapFormat';
 
@@ -16,18 +22,40 @@ import type { MapMeta } from './mapFormat';
 export const HARBOUR_BRIDGE = {
   /** Full deck width including the clip-on lanes. */
   deckHalfWidth: 20,
-  /** Deck slab thickness below the road surface. */
-  deckThickness: 4,
+  /** The road slab and the girders under it, where there is no truss: how far below the road they reach. */
+  deckThickness: 3,
   /** The steel truss sits on the original central lanes only. */
   trussHalfWidth: 10,
   /** The truss stands where it rises more than this above the deck. */
   trussMinRise: 4,
-  pierHalfLength: 6,
-  pierHalfWidth: 9,
-  /** Pier positions as fractions along a -> b. Shared by the visual model and the colliders. */
-  pierFractions: [0.08, 0.17, 0.26, 0.36, 0.48, 0.72, 0.86] as readonly number[],
   /** A fall of more than this between two stations is the end of the bridge: the ground beyond an abutment. */
   abutmentDrop: 3.5,
+
+  /** The navigation span, pier to pier (the real one is 243.8 m). */
+  mainSpan: 244,
+  /** About how far apart the piers stand under the approach spans, and how long the span beyond the far main pier may be. */
+  approachSpan: 118,
+  anchorSpan: 175,
+  /** How far below the road the truss reaches: along the approaches, at the two main piers, and at mid-span. */
+  trussDepth: 8,
+  pierDepth: 16,
+  crownDepth: 3,
+  /** The truss deepens towards a main pier over this distance. */
+  haunchReach: 90,
+  /** The truss runs inland from the shore this far at most, and only while there is this much room under the road. */
+  steelInland: 60,
+  steelMinClearance: 11,
+
+  /** A pier: two legs under the truss, footprint half-sizes along and across the bridge, and the beam across their tops. */
+  pierHalfLength: 3.6,
+  pierHalfWidth: 12.2,
+  pierCapHeight: 3,
+  pierCapHalfLength: 4,
+  /** Rows of columns under the approach viaducts: spacing, the least room that needs one, and the row's half-sizes. */
+  bentSpacing: 40,
+  bentMinClearance: 4,
+  bentHalfLength: 1.6,
+  bentHalfWidth: 16,
 } as const;
 
 /** Profile value at distance s along a -> b, linearly interpolated between samples. */
@@ -72,6 +100,28 @@ export interface BridgeModel {
   topAt(s: number): number;
   /** A point `lateral` metres to the side at distance s; y defaults to the road surface. */
   at(s: number, lateral: number, y?: number): { x: number; y: number; z: number };
+
+  /** The ground under each station, 0 over the sea (all 0 on a map that did not measure it). */
+  groundY: readonly number[];
+  groundAt(s: number): number;
+  /** The steel bridge proper, shore to shore, as distances from end a. Outside it the road is a viaduct. */
+  steel: { from: number; to: number };
+  /** Its piers, in order along the bridge; `main` marks the two that carry the navigation span. */
+  piers: readonly { s: number; main: boolean }[];
+  /** Rows of columns under the approach viaducts and at the two ends of the steel, as distances from end a. */
+  bents: readonly number[];
+  /** How far below the road the structure reaches at s: the truss, or just the deck's own girders. */
+  depthAt(s: number): number;
+  /** The underside of the structure at s: nothing of the bridge but its piers is below this. */
+  bottomAt(s: number): number;
+}
+
+/** Evenly spaced points strictly between `from` and `to`, about `about` apart. */
+function between(from: number, to: number, about: number): number[] {
+  const n = Math.max(1, Math.round((to - from) / about));
+  const out: number[] = [];
+  for (let k = 1; k < n; k++) out.push(from + (k * (to - from)) / n);
+  return out;
 }
 
 /** Median over a window of 2 * half + 1 samples, with the ends held. */
@@ -191,6 +241,76 @@ export function bridgeModel(hb: Measured): BridgeModel {
   const isTruss = (i: number) => truss !== null && i >= truss.first && i <= truss.last;
   const topY = deckY.map((d, i) => (isTruss(i) ? tops[i] : d));
 
+  // ---- what is under the road
+  const groundY = deckY.map((_, i) => Math.max(0, hb.groundY?.[i] ?? 0));
+  const groundAt = (s: number) => bridgeProfileAt(groundY, step, s);
+  const sea = (i: number) => groundY[i] <= 0.5;
+  // The steel bridge: the water under the crest, shore to shore, and inland a little while the
+  // road is still high enough above the ground for a truss to hang under it.
+  let steelFirst = first;
+  let steelLast = last;
+  if (sea(crest)) {
+    let w0 = crest;
+    let w1 = crest;
+    while (w0 - 1 >= first && sea(w0 - 1)) w0--;
+    while (w1 + 1 <= last && sea(w1 + 1)) w1++;
+    const inland = (from: number, dir: 1 | -1) => {
+      let i = from;
+      for (let k = 0; k < HARBOUR_BRIDGE.steelInland / step; k++) {
+        const j = i + dir;
+        if (j < first || j > last || deckY[j] - groundY[j] < HARBOUR_BRIDGE.steelMinClearance) break;
+        i = j;
+      }
+      return i;
+    };
+    steelFirst = inland(w0, -1);
+    steelLast = inland(w1, 1);
+  }
+  const steel = { from: steelFirst * step, to: Math.min(steelLast * step, length) };
+
+  // The two main piers stand half a navigation span either side of the middle of the arch.
+  const middle = (truss ? (truss.first + truss.last) / 2 : crest) * step;
+  const half = Math.min(HARBOUR_BRIDGE.mainSpan / 2, Math.max(20, (steel.to - steel.from) / 2 - 20));
+  const mainA = Math.max(steel.from + 20, middle - half);
+  const mainB = Math.min(steel.to - 20, middle + half);
+  const piers: { s: number; main: boolean }[] = [];
+  if (mainB - mainA > 40) {
+    for (const s of between(steel.from, mainA, HARBOUR_BRIDGE.approachSpan)) piers.push({ s, main: false });
+    piers.push({ s: mainA, main: true }, { s: mainB, main: true });
+    for (const s of between(mainB, steel.to, HARBOUR_BRIDGE.anchorSpan)) piers.push({ s, main: false });
+  }
+
+  const deckAt = (s: number) => bridgeProfileAt(deckY, step, s);
+  const depthAt = (s: number) => {
+    if (s <= steel.from || s >= steel.to || piers.length === 0) return HARBOUR_BRIDGE.deckThickness;
+    let depth: number;
+    if (s > mainA && s < mainB) {
+      // The navigation span: deepest at the piers, arching up to the crown.
+      const t = ((s - mainA) / (mainB - mainA)) * 2 - 1;
+      depth = HARBOUR_BRIDGE.crownDepth + (HARBOUR_BRIDGE.pierDepth - HARBOUR_BRIDGE.crownDepth) * t * t;
+    } else {
+      const k = Math.max(0, 1 - (s <= mainA ? mainA - s : s - mainB) / HARBOUR_BRIDGE.haunchReach);
+      depth = HARBOUR_BRIDGE.trussDepth + (HARBOUR_BRIDGE.pierDepth - HARBOUR_BRIDGE.trussDepth) * k * k;
+    }
+    // It tapers into the plain deck over the last thirty metres at each shore.
+    const end = Math.min(s - steel.from, steel.to - s);
+    return end < 30 ? HARBOUR_BRIDGE.deckThickness + (depth - HARBOUR_BRIDGE.deckThickness) * (end / 30) : depth;
+  };
+  // Never into the ground, and never thinner than a road slab.
+  const bottomAt = (s: number) => Math.min(deckAt(s) - 1, Math.max(deckAt(s) - depthAt(s), groundAt(s) + 0.5));
+
+  // Rows of columns: one at each end of the steel, then every so often out along the viaducts,
+  // wherever the road is far enough off the ground to need holding up.
+  const bents: number[] = [];
+  const spanFrom = first * step;
+  const spanTo = Math.min(last * step, length);
+  const tall = (s: number) => deckAt(s) - groundAt(s) >= HARBOUR_BRIDGE.bentMinClearance;
+  if (steel.from > spanFrom || steel.to < spanTo) {
+    for (let s = steel.from; s >= spanFrom + 4; s -= HARBOUR_BRIDGE.bentSpacing) if (steel.from > spanFrom && tall(s)) bents.push(s);
+    for (let s = steel.to; s <= spanTo - 4; s += HARBOUR_BRIDGE.bentSpacing) if (steel.to < spanTo && tall(s)) bents.push(s);
+    bents.sort((a, b) => a - b);
+  }
+
   const model: BridgeModel = {
     length,
     step,
@@ -206,8 +326,15 @@ export function bridgeModel(hb: Measured): BridgeModel {
     truss,
     crest,
     isTruss,
-    deckAt: (s) => bridgeProfileAt(deckY, step, s),
+    deckAt,
     topAt: (s) => bridgeProfileAt(topY, step, s),
+    groundY,
+    groundAt,
+    steel,
+    piers,
+    bents,
+    depthAt,
+    bottomAt,
     at(s, lateral, y) {
       return { x: hb.a.x + ux * s + vx * lateral, y: y ?? bridgeProfileAt(deckY, step, s), z: hb.a.z + uz * s + vz * lateral };
     },

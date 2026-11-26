@@ -30,7 +30,7 @@ import type { Look } from '../shared/timeOfDay';
 import { type Ambient, createAmbient } from '../world/ambient';
 import type { DetailOutput, LandImage } from '../world/buildDetail';
 import type { BuildOutput } from '../world/buildWorld';
-import { buildHarbourBridge } from '../world/landmarks/harbourBridge';
+import { buildHarbourBridge, buildHarbourBridgeDetail } from '../world/landmarks/harbourBridge';
 import { buildRangitoto } from '../world/landmarks/rangitoto';
 import { buildSkyDeck } from '../world/landmarks/skyDeck';
 import { buildSkyTower } from '../world/landmarks/skyTower';
@@ -103,6 +103,8 @@ export class WorldSceneImpl implements WorldScene {
   private terrain: Mesh;
   private groundImage: Texture;
   private land: { material: ShaderMaterial; fade: number } | null = null;
+  private bridgeDetail: Mesh;
+  private bridgeLine: { ax: number; az: number; bx: number; bz: number };
   private lastRender = 0;
   private fps = 60;
   private frameMs = 0;
@@ -191,6 +193,13 @@ export class WorldSceneImpl implements WorldScene {
     const bridge = new Mesh(track(buildHarbourBridge(meta)), lmMat);
     bridge.name = 'harbour-bridge';
     this.scene.add(bridge);
+    // Its lamp posts and flags, which are only drawn from close by (see update).
+    const hb = meta.landmarks.harbourBridge;
+    this.bridgeLine = { ax: hb.a.x, az: hb.a.z, bx: hb.b.x, bz: hb.b.z };
+    this.bridgeDetail = new Mesh(track(buildHarbourBridgeDetail(meta)), lmMat);
+    this.bridgeDetail.name = 'harbour-bridge-detail';
+    this.bridgeDetail.visible = false;
+    this.scene.add(this.bridgeDetail);
 
     const rMat = track(createLandmarkMaterial(sh, 0.72));
     this.rangitoto = new Mesh(track(buildRangitoto(meta)), rMat);
@@ -345,6 +354,14 @@ export class WorldSceneImpl implements WorldScene {
       l.fade = Math.min(1, l.fade + dt / 0.9);
       l.material.uniforms.uDetail.value = l.fade;
       l.material.uniforms.uGroundR.value = NEAR_RADIUS.ground * this.near;
+    }
+    // The bridge's lamp posts and flags: only when the plane is near the bridge.
+    {
+      const l = this.bridgeLine;
+      const dx = l.bx - l.ax;
+      const dz = l.bz - l.az;
+      const t = Math.min(1, Math.max(0, ((cp.x - l.ax) * dx + (cp.z - l.az) * dz) / (dx * dx + dz * dz || 1)));
+      this.bridgeDetail.visible = Math.hypot(cp.x - (l.ax + dx * t), cp.z - (l.az + dz * t)) < NEAR_RADIUS.bridge * this.near;
     }
     // Rangitoto: scaled towards the camera so it sits inside the far plane at the same angular size.
     const base = this.rangitotoBase;

@@ -73,6 +73,8 @@ export interface MapMeta {
       deckY: number[];
       /** Truss top height (m ASL) at each sample along a -> b. */
       topY: number[];
+      /** The ground under each sample, 0 over the sea. Absent on maps built before it was measured. */
+      groundY?: number[];
       /** Highest point of the truss: where the "Talk to me" beacon sits. */
       archTop: { x: number; z: number; y: number };
     };

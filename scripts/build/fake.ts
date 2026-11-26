@@ -169,10 +169,17 @@ const blen = Math.hypot(bridgeB.x - bridgeA.x, bridgeB.z - bridgeA.z);
 const samples = Math.floor(blen / step) + 1;
 const deckY: number[] = [];
 const topY: number[] = [];
+const bridgeGround: number[] = [];
 for (let i = 0; i < samples; i++) {
   const f = (i * step) / blen;
   const deck = 12 + 31 * Math.sin(Math.min(f / 0.75, 1) * (Math.PI / 2)) - (f > 0.9 ? (f - 0.9) * 200 : 0);
   deckY.push(Math.round(deck * 10) / 10);
+  {
+    // What is under the bridge here: the sea, or the land the far end comes down onto.
+    const gx = bridgeA.x + ((bridgeB.x - bridgeA.x) * i * step) / blen;
+    const gz = bridgeA.z + ((bridgeB.z - bridgeA.z) * i * step) / blen;
+    bridgeGround.push(isWater(gx, gz) ? 0 : Math.round(landHeight(gx, gz) * 10) / 10);
+  }
   const truss = f > 0.45 && f < 0.95 ? 18 * Math.sin(((f - 0.45) / 0.5) * Math.PI) + 6 : 0;
   topY.push(Math.round((deck + truss) * 10) / 10);
 }
@@ -341,6 +348,7 @@ const meta: MapMeta = {
       step,
       deckY,
       topY,
+      groundY: bridgeGround,
       archTop: { x: bridgeA.x + ux * topIdx * step, z: bridgeA.z + uz * topIdx * step, y: topY[topIdx] },
     },
     rangitoto: { x: rangitoto.x, z: rangitoto.z, summitY: 260, baseRadius: 2800 },

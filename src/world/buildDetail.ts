@@ -3,10 +3,10 @@
  * Pure (no DOM, no three); runs in the geometry worker.
  */
 import { landTexture } from '../shared/land';
-import { type Bounds, type TerrainGrid, decodeLand, decodeRoads } from '../shared/mapFormat';
+import { type Bounds, type MapMeta, type TerrainGrid, decodeLand, decodeRoads } from '../shared/mapFormat';
 import type { QualityTier } from '../shared/detail';
 import { inflateIfGzip } from './buildWorld';
-import { type RibbonMesh, buildRibbons, ribbonTransferables } from './ribbons';
+import { type RibbonMesh, bridgeStrips, buildRibbons, ribbonTransferables } from './ribbons';
 import { sampleTerrainMesh } from './terrainMesh';
 
 export interface DetailInput {
@@ -14,6 +14,8 @@ export interface DetailInput {
   roads?: Uint8Array;
   /** land.bin, gzipped or not; absent if the map has none. */
   land?: Uint8Array;
+  /** The Harbour Bridge as measured, so its deck gets its lanes along with the roads. */
+  bridge?: MapMeta['landmarks']['harbourBridge'];
   terrain: TerrainGrid;
   bounds: Bounds;
   quality: QualityTier;
@@ -40,7 +42,10 @@ export async function buildDetail(input: DetailInput): Promise<DetailOutput> {
   if (input.roads) {
     const roads = decodeRoads(await inflateIfGzip(input.roads));
     // The low tier leaves out service lanes: two fifths of the network, and the least missed.
-    out.ribbons = buildRibbons(roads, heightAt, input.bounds, { minClass: input.quality === 'low' ? 1 : 0 });
+    out.ribbons = buildRibbons(roads, heightAt, input.bounds, {
+      minClass: input.quality === 'low' ? 1 : 0,
+      strips: input.bridge ? bridgeStrips(input.bridge) : [],
+    });
   }
   if (input.land) {
     const grid = decodeLand(await inflateIfGzip(input.land));

@@ -132,10 +132,12 @@ export function pathOverWater(path: Path, query: WorldQuery, meta: Pick<MapMeta,
  */
 export function bridgeCruisePath(hb: MapMeta['landmarks']['harbourBridge'], reach = 650): Path {
   const g = bridgeGeometry(hb);
-  // The navigation span lies between the piers at 0.48 and 0.72 of the way along.
-  const mid = (HARBOUR_BRIDGE.pierFractions[4] + HARBOUR_BRIDGE.pierFractions[5]) / 2;
-  const a = g.at(mid * g.length, -reach);
-  const b = g.at(mid * g.length, reach);
+  // The navigation span lies between the two main piers; without them, under the crest.
+  const m = bridgeModel(hb);
+  const main = m.piers.filter((p) => p.main);
+  const mid = main.length === 2 ? (main[0].s + main[1].s) / 2 : m.crest * m.step;
+  const a = g.at(mid, -reach);
+  const b = g.at(mid, reach);
   return makePath([
     { x: a.x, z: a.z },
     { x: b.x, z: b.z },
@@ -158,8 +160,18 @@ export function ferryPaths(meta: MapMeta, query: WorldQuery): { route: Omit<Ferr
 
 /* ------------------------------------------------------------ bridge traffic */
 
-/** Lane centres across the deck, metres from the centreline, inside the truss. */
-export const BRIDGE_LANES = [3.5, 7.2] as const;
+/**
+ * Lane centres across the deck, metres from the centreline, for each direction: two of the four
+ * lanes between the trusses and the two on that side's clip-on, which hangs outside the truss. They
+ * are the centres of the lanes painted on the deck (world/ribbons.ts, bridgeStrips).
+ */
+export const BRIDGE_LANES = [1.65, 4.95, 11.85, 15.15] as const;
+/** Half the width of a car as drawn: what fits a lane with the median barrier on one side of it. */
+export const BRIDGE_CAR_HALF_WIDTH = 1.4;
+/** Half the width of the median barrier down the middle of the deck. */
+export const BRIDGE_MEDIAN_HALF_WIDTH = 0.22;
+/** The truss stands in this band either side of the centreline; no lane may overlap it. */
+export const BRIDGE_TRUSS_BAND = [7.4, 10] as const;
 /** Cars drive on the left. */
 export const BRIDGE_CAR_SPEED = 22;
 
@@ -197,5 +209,8 @@ export function bridgeCar(i: number, count: number, length: number, t: number): 
   return { s: forward ? along : length - along, lateral: forward ? -lane : lane, forward };
 }
 
-/** The deck must be wide enough for the lanes used (a guard for maps with a different bridge). */
-export const BRIDGE_LANES_FIT = Math.max(...BRIDGE_LANES) + 1.5 < HARBOUR_BRIDGE.trussHalfWidth;
+/** Every lane's car is on the deck and clear of the truss (a guard, should the numbers above be changed). */
+export const BRIDGE_LANES_FIT =
+  Math.min(...BRIDGE_LANES) - BRIDGE_CAR_HALF_WIDTH > BRIDGE_MEDIAN_HALF_WIDTH &&
+  Math.max(...BRIDGE_LANES) + BRIDGE_CAR_HALF_WIDTH < HARBOUR_BRIDGE.deckHalfWidth - 2 &&
+  BRIDGE_LANES.every((l) => l + BRIDGE_CAR_HALF_WIDTH <= BRIDGE_TRUSS_BAND[0] || l - BRIDGE_CAR_HALF_WIDTH >= BRIDGE_TRUSS_BAND[1]);

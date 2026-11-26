@@ -78,8 +78,8 @@ export class MeshBuilder {
     }
   }
 
-  /** Axis-aligned-in-its-own-frame box from 8 corners built by `prismCorners`. */
-  hexahedron(c: V3[], color: string, topColor = color) {
+  /** A box from its 8 corners: 0-3 round the bottom, 4-7 round the top, in the same order. */
+  hexahedron(c: V3[], color: string, topColor = color, alpha = ALPHA_NORMAL) {
     const ref: V3 = [0, 0, 0];
     for (const p of c) {
       ref[0] += p[0] / 8;
@@ -87,16 +87,16 @@ export class MeshBuilder {
       ref[2] += p[2] / 8;
     }
     // corners 0-3 bottom, 4-7 top, in loop order
-    this.quad(c[4], c[5], c[6], c[7], ref, topColor);
-    this.quad(c[0], c[1], c[2], c[3], ref, color);
+    this.quad(c[4], c[5], c[6], c[7], ref, topColor, alpha);
+    this.quad(c[0], c[1], c[2], c[3], ref, color, alpha);
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) % 4;
-      this.quad(c[i], c[j], c[j + 4], c[i + 4], ref, color);
+      this.quad(c[i], c[j], c[j + 4], c[i + 4], ref, color, alpha);
     }
   }
 
   /** A square-section beam from p0 to p1; `side` is a horizontal-ish hint for the section's width axis. */
-  beam(p0: V3, p1: V3, w: number, h: number, color: string, side: V3 = [0, 0, 1]) {
+  beam(p0: V3, p1: V3, w: number, h: number, color: string, side: V3 = [0, 0, 1], alpha = ALPHA_NORMAL) {
     const d = new Vector3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]).normalize();
     const s = new Vector3(side[0], side[1], side[2]);
     s.addScaledVector(d, -s.dot(d));
@@ -111,7 +111,7 @@ export class MeshBuilder {
     const ring = (p: V3): V3[] => [corner(p, -1, -1), corner(p, 1, -1), corner(p, 1, 1), corner(p, -1, 1)];
     const a = ring(p0);
     const b = ring(p1);
-    this.hexahedron([...a, ...b], color);
+    this.hexahedron([...a, ...b], color, color, alpha);
   }
 
   build(): BufferGeometry {

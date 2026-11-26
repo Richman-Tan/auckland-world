@@ -22,7 +22,7 @@ export interface WorldDetail {
 export const FOG_FAR: Record<QualityTier, number> = { high: 3200, low: 2400 };
 
 /** How far from the camera each kind of close-up detail is drawn at `near` = 1, metres. */
-export const NEAR_RADIUS = { roads: 700, ground: 420, buildings: 500 } as const;
+export const NEAR_RADIUS = { roads: 700, ground: 420, buildings: 500, bridge: 900 } as const;
 
 /**
  * Level 0 is the tier's full detail. Each step down is cheaper: first a shorter draw distance and

@@ -35,7 +35,7 @@ export function loadDetail(base: string, meta: MapMeta, terrain: TerrainGrid, qu
           reject(new Error(`detail worker failed: ${ev.message}`));
         };
         // The terrain is copied, not handed over: the main thread still needs it.
-        const req: WorkerRequest = { type: 'detail', input: { roads, land, terrain, bounds: meta.bounds, quality } };
+        const req: WorkerRequest = { type: 'detail', input: { roads, land, bridge: meta.landmarks.harbourBridge, terrain, bounds: meta.bounds, quality } };
         worker.postMessage(req, [roads, land].flatMap((b) => (b ? [b.buffer as ArrayBuffer] : [])));
       }),
   );

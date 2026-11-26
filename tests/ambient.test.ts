@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BRIDGE_CAR_HALF_WIDTH,
   BRIDGE_LANES,
   BRIDGE_LANES_FIT,
+  BRIDGE_MEDIAN_HALF_WIDTH,
+  BRIDGE_TRUSS_BAND,
   FERRY_DWELL_S,
   FERRY_ROUTES,
   bridgeCar,
@@ -14,7 +17,11 @@ import {
   routePath,
   shuttleAt,
 } from '../src/shared/ambientPaths';
+import { bridgeModel } from '../src/shared/bridge';
 import { HARBOUR_BRIDGE } from '../src/shared/collision';
+import { LANE_WIDTH } from '../src/shared/roads';
+import { TRUSS_PLANE } from '../src/world/landmarks/harbourBridge';
+import { BRIDGE_CLIP_ON_CENTRE, bridgeStrips } from '../src/world/ribbons';
 import { FAKE_DIR, REAL_DIR, loadWorld, realMapExists } from './flightWorld';
 
 describe('ambient paths', () => {
@@ -63,20 +70,47 @@ describe('ambient paths', () => {
     }
   });
 
-  it('bridge traffic keeps left, stays on the deck and inside the truss', () => {
+  it('has four lanes each way: two between the trusses and two on the clip-on, none of them through the steel', () => {
     expect(BRIDGE_LANES_FIT).toBe(true);
+    expect(BRIDGE_LANES).toHaveLength(4);
+    const [inner, outer] = BRIDGE_TRUSS_BAND;
+    // The truss the model draws is inside the band the lanes are kept out of.
+    expect(inner).toBeLessThanOrEqual(TRUSS_PLANE - 1.3 + 1e-9);
+    expect(outer).toBeGreaterThanOrEqual(TRUSS_PLANE + 1.3 - 1e-9);
+    expect(outer).toBeLessThanOrEqual(HARBOUR_BRIDGE.trussHalfWidth);
+    const inside = BRIDGE_LANES.filter((l) => l + BRIDGE_CAR_HALF_WIDTH <= inner);
+    const outside = BRIDGE_LANES.filter((l) => l - BRIDGE_CAR_HALF_WIDTH >= outer);
+    expect(inside).toHaveLength(2);
+    expect(outside).toHaveLength(2);
+    // Cars in neighbouring lanes do not overlap, and the outermost is on the road, inside the parapet.
+    const sorted = [...BRIDGE_LANES].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(2 * BRIDGE_CAR_HALF_WIDTH);
+    expect(sorted[0] - BRIDGE_CAR_HALF_WIDTH).toBeGreaterThan(BRIDGE_MEDIAN_HALF_WIDTH);
+    expect(sorted[3] + BRIDGE_CAR_HALF_WIDTH).toBeLessThan(18);
+    // And they are the lanes painted on the deck: the middle of each lane of each strip.
+    const painted = bridgeStrips(loadWorld(FAKE_DIR).meta.landmarks.harbourBridge).flatMap((s) => {
+      const centre = Math.abs(s.stations[0].x - bridgeModel(loadWorld(FAKE_DIR).meta.landmarks.harbourBridge).at(s.stations[0].along, 0).x) < 1e-6 ? 0 : BRIDGE_CLIP_ON_CENTRE;
+      return Array.from({ length: s.lanes }, (_, k) => Math.abs(centre + (k - (s.lanes - 1) / 2) * LANE_WIDTH));
+    });
+    for (const lane of BRIDGE_LANES) expect(painted.some((p) => Math.abs(p - lane) < 0.01), `lane ${lane}`).toBe(true);
+  });
+
+  it('bridge traffic keeps left and stays on the deck', () => {
     const length = 1600;
+    const used = new Set<number>();
     for (let t = 0; t < 400; t += 3.7) {
-      for (let i = 0; i < 36; i++) {
-        const car = bridgeCar(i, 36, length, t);
+      for (let i = 0; i < 56; i++) {
+        const car = bridgeCar(i, 56, length, t);
         expect(car.s).toBeGreaterThanOrEqual(0);
         expect(car.s).toBeLessThanOrEqual(length);
-        expect(Math.abs(car.lateral)).toBeLessThan(HARBOUR_BRIDGE.trussHalfWidth - 1.5);
+        used.add(car.lateral);
         expect(BRIDGE_LANES as readonly number[]).toContain(Math.abs(car.lateral));
         // Driving a to b you are on the -lateral side; coming back, on the other.
         expect(Math.sign(car.lateral)).toBe(car.forward ? -1 : 1);
       }
     }
+    // Every lane of both directions carries something.
+    expect(used.size).toBe(8);
     // Both directions are in use, and a car moves the way it faces.
     const a0 = bridgeCar(0, 36, length, 10);
     const a1 = bridgeCar(0, 36, length, 11);
@@ -124,7 +158,9 @@ describe.skipIf(!realMapExists)('ambient paths on the real map', () => {
     const cruise = bridgeCruisePath(hb);
     expect(pathOverWater(cruise, world, meta)).toBe(true);
     const g = bridgeGeometry(hb);
-    const [, , , , pierA, pierB] = HARBOUR_BRIDGE.pierFractions;
+    const main = bridgeModel(hb).piers.filter((p) => p.main);
+    expect(main).toHaveLength(2);
+    const [pierA, pierB] = main.map((p) => p.s / g.length);
     // Where the cruise crosses the bridge's centreline, as a fraction of the way along it.
     const mid = pathAt(cruise, cruise.length / 2);
     const along = ((mid.x - hb.a.x) * (hb.b.x - hb.a.x) + (mid.z - hb.a.z) * (hb.b.z - hb.a.z)) / (g.length * g.length);
