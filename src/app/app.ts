@@ -586,7 +586,6 @@ export function startApp(): void {
     if (!loaded) return;
     const look = lookAtSolar(chosenSolarHour(settings.get().time, params.get('time'), new Date()));
     loaded.world.setLook(look);
-    loaded.plane.setTint(look.ambient);
     lookTimer = 30;
     redraw();
   }
@@ -613,7 +612,7 @@ export function startApp(): void {
     const stops = placeStops(content, world.meta, world.query.groundAt);
     world.setStops(stops);
     const camera = flight.createChaseCamera();
-    const plane = flight.createPlane();
+    const plane = flight.createPlane(world.lighting);
     world.add(plane.object);
     const sim = flight.createFlightSim();
     sim.reset({ ...spawnPoint(content, world.meta), speed: 55 });
@@ -978,6 +977,8 @@ export function startApp(): void {
           stats: l.world.stats(),
           proximity: proximityCurrent,
           detail: { level: detailLevel, ...ladder[detailLevel], governorFps: Math.round(governor.fps), idleFrames },
+          // The plane's shadow as the shaders see it: strength, and the direction it is cast from.
+          shadow: { strength: l.world.lighting.uShadowK.value, from: l.world.lighting.uShadowDir.value.toArray().map((v) => Math.round(v * 100) / 100) },
         };
       },
       teleport: (id: StopId) => {

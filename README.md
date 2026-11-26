@@ -143,6 +143,13 @@ Beside the place name the title shows the time in Auckland and the part of the d
 - **Sound** (`src/audio/index.ts`) is off until switched on, from the HUD or the settings. It is synthesised with Web Audio (an engine note and wind that follow the airspeed, a room hum on the Sky Deck, a few short cues), so there are no audio files; the module is its own chunk, fetched on first use.
 - `dev/world.html?map=real&view=bridge&time=18` previews any hour; `[` and `]` scrub half an hour at a time.
 
+### The plane
+
+One mesh of about ninety coloured boxes (`src/flight/plane.ts`), and one draw call. Each box says which part it belongs to and where that part hinges, and the plane's material (`createPlaneMaterial` in `src/render/materials.ts`) moves the ailerons, elevator, rudder, propeller and boost flame from that in the vertex stage. It is lit by the same sun or moon as the city, with a little light of its own so it never sinks into the night, and carries nav lights, a strobe and a landing light. The registration on the wing is `ZK`, New Zealand's prefix, and the pilot's initials.
+
+- **Control surfaces** follow what the flight model just did rather than the keys: the change in bank, pitch and heading since the last frame (`surfaceDeflections` in `src/flight/planeMotion.ts`), clamped so an autopilot time-warp holds them at full travel instead of thrashing.
+- **The shadow** is not a shape on the ground. The plane writes its position and axes into the uniforms every material shares, and one function in the shared shader code (`planeShadow`) darkens whatever lies along the light from it, so it falls correctly on roofs, the bridge deck and the water. The light it is cast from is the sun's or moon's bearing but never lower than 65 degrees (`shadowDirection`), so it stays under the plane and says how high you are. From the chase view it shows mostly on low passes and in the orbit around a stop.
+
 ### Settings and performance
 
 - **Settings** live in the pause menu (Esc) and are kept in `localStorage` (`aw:settings:v1`, `src/app/settings.ts`): graphics (Auto, Sharp, Fast), time of day, sound, which way W or stick-up pitches, and reduced motion.

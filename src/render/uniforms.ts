@@ -27,6 +27,16 @@ export interface SharedUniforms {
   uIconClipLeft: Uniform<number>;
   uWall: Uniform<Vector3[]>;
   uRoof: Uniform<Vector3[]>;
+  /**
+   * The plane's shadow (planeShadow in shaderChunks.ts). The plane writes these each frame:
+   * its position and its right and forward axes, the direction the shadow is cast from, and the
+   * shadow's strength, which is 0 whenever the plane is not being drawn.
+   */
+  uShadowPos: Uniform<Vector3>;
+  uShadowRight: Uniform<Vector3>;
+  uShadowFwd: Uniform<Vector3>;
+  uShadowDir: Uniform<Vector3>;
+  uShadowK: Uniform<number>;
 }
 
 /** Sun direction (towards the sun): azimuth clockwise from north (-z), altitude above the horizon. */
@@ -61,6 +71,11 @@ export function createSharedUniforms(fogFar: number): SharedUniforms {
     uIconClipLeft: { value: -2 },
     uWall: { value: palette(WALL_PALETTE) },
     uRoof: { value: palette(ROOF_PALETTE) },
+    uShadowPos: { value: new Vector3() },
+    uShadowRight: { value: new Vector3(1, 0, 0) },
+    uShadowFwd: { value: new Vector3(0, 0, -1) },
+    uShadowDir: { value: new Vector3(0, 1, 0) },
+    uShadowK: { value: 0 },
   };
   // Until the app says otherwise, the afternoon the site was first drawn in.
   applyLook(shared, lookAtSolar(SOLAR.afternoon));

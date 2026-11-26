@@ -66,6 +66,9 @@ export class WorldSceneImpl implements WorldScene {
   readonly renderer: PixelRenderer['renderer'];
   readonly scene = new Scene();
   readonly shared: SharedUniforms;
+  get lighting(): SharedUniforms {
+    return this.shared;
+  }
   private px: PixelRenderer;
   private beacons: Beacons;
   private disposables: { dispose(): void }[] = [];

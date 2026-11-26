@@ -14,6 +14,7 @@
  */
 import type { Camera, Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import type { SiteContent, StopId } from '../content/types';
+import type { SharedUniforms } from '../render/uniforms';
 import type { MapMeta } from '../shared/mapFormat';
 import type { WorldQuery } from '../shared/collision';
 import type { PaletteKey } from '../shared/palette';
@@ -149,10 +150,12 @@ export interface ChaseCamera {
 /** src/flight/plane.ts */
 export interface PlaneModel {
   readonly object: Object3D;
-  /** Pose the model from the (interpolated) flight state; time for propeller/lights. */
+  /**
+   * Pose the model from the (interpolated) flight state; `time` (seconds, the frame clock) turns the
+   * propeller, eases the control surfaces and flashes the lights. Also places the plane's shadow,
+   * and removes it when the model is hidden, so call it after setting `object.visible`.
+   */
   update(state: FlightState, time: number): void;
-  /** Dim the paint to match the light (the plane is unlit): white by day, moonlit blue at night. */
-  setTint(rgb: readonly [number, number, number]): void;
 }
 
 /* ------------------------------------------------------------------ input */
@@ -225,6 +228,11 @@ export interface WorldScene {
   readonly meta: MapMeta;
   readonly query: WorldQuery;
   readonly renderer: WebGLRenderer;
+  /**
+   * The light everything in the world shares (sun or moon, fog, the hour). The plane is drawn with
+   * it and writes its own position into it, so the world can draw the plane's shadow.
+   */
+  readonly lighting: SharedUniforms;
   /** Add an object (the plane) to the scene. */
   add(object: Object3D): void;
   setStops(stops: StopPlacement[]): void;

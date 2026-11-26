@@ -12,6 +12,13 @@ uniform vec3 uLightMid;
 uniform vec3 uLightLo;
 uniform vec3 uAmbient;
 uniform float uNight;
+// The plane, for the shadow it casts (see planeShadow): where it is, its right and forward axes,
+// the direction to the light the shadow is cast from, and how strong the shadow is (0 = none).
+uniform vec3 uShadowPos;
+uniform vec3 uShadowRight;
+uniform vec3 uShadowFwd;
+uniform vec3 uShadowDir;
+uniform float uShadowK;
 `;
 
 export const FRAG_OUT = /* glsl */ `
@@ -51,6 +58,28 @@ float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
+}
+
+// The plane's shadow on whatever is being drawn: 1 where there is none, less inside it.
+// It is worked out here rather than drawn as a shape on the ground, so it lies correctly on roofs,
+// the bridge deck and the water alike. The point is carried along the light to the plane of the
+// wings and tested against the plane's outline there (wing, fuselage, tailplane). The outline
+// grows a little with distance and the shadow thins out in a dither, gone by about 220 m.
+float planeShadow(vec3 P) {
+  vec3 v = uShadowPos - P;
+  if (uShadowK <= 0.0 || dot(v, v) > 90000.0) return 1.0;
+  vec3 N = cross(uShadowFwd, uShadowRight);
+  float dn = dot(uShadowDir, N);
+  if (abs(dn) < 0.05) return 1.0;
+  float t = dot(v, N) / dn;
+  if (t <= 0.5) return 1.0;
+  vec3 q = P + uShadowDir * t - uShadowPos;
+  vec2 l = vec2(dot(q, uShadowRight), dot(q, uShadowFwd)) / (1.0 + t * 0.006);
+  float inside = max(step(abs(l.x), 6.2) * step(abs(l.y - 0.6), 1.5),
+                 max(step(abs(l.x), 1.3) * step(-7.2, l.y) * step(l.y, 6.0),
+                     step(abs(l.x), 2.3) * step(-7.4, l.y) * step(l.y, -5.5)));
+  float k = uShadowK * (1.0 - smoothstep(40.0, 220.0, t));
+  return 1.0 - 0.45 * inside * step(bayer4(gl_FragCoord.xy), k);
 }
 `;
 

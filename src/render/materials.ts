@@ -142,7 +142,7 @@ void main() {
   if (t.a < 0.5) discard;
   vec3 n = flatNormal(vWorld);
   vec3 lit = mix(uAmbient, lambert3(n), 0.45);
-  vec3 c = t.rgb * lit;
+  vec3 c = t.rgb * lit * planeShadow(vWorld);
   float d = length(vWorld - cameraPosition);
   outColor = vec4(pixelFog(c, d, 1.0), 1.0);
 }`,
@@ -237,6 +237,7 @@ void main() {
   // lighter towards the horizon
   float up = clamp(V.y, 0.0, 1.0);
   c = mix(c, uFogColor, pow(1.0 - up, 3.0) * 0.4);
+  c *= planeShadow(vWorld);
 
   outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
 }`,
@@ -299,6 +300,7 @@ void main() {
     vec3 farC = alb * shade * 0.9 + vec3(0.5, 0.38, 0.18) * (uNight * 0.24);
     c = mix(farC, wc, fade);
   }
+  c *= planeShadow(vWorld);
   outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
 }`,
     { uWall: shared.uWall, uRoof: shared.uRoof },
@@ -348,6 +350,8 @@ void main() {
     c = mix(c, vColor.a < 0.75 ? vec3(1.0, 0.82, 0.45) : lamp, uNight);
   }
   c = mix(c, lamp, uInterior * uNight);
+  // Out of doors only: nothing flies over the inside of a room.
+  if (uInterior < 0.5) c *= planeShadow(vWorld);
   outColor = vec4(pixelFog(c, dist, uFogCap), 1.0);
 }`,
     { uFogCap: { value: fogCap }, uInterior: { value: interior ? 1 : 0 } },
@@ -391,9 +395,92 @@ void main() {
   if (vGlow > 0.5) {
     vec3 lamp = vGlow < 1.5 ? vec3(1.0, 0.96, 0.78) : (vGlow < 2.5 ? vec3(1.0, 0.16, 0.12) : vec3(1.0, 0.82, 0.45));
     c = mix(c, lamp, uNight);
+  } else {
+    c *= planeShadow(vWorld);
   }
   outColor = vec4(pixelFog(c, dist, 1.0), 1.0);
 }`,
+  );
+}
+
+/* ------------------------------------------------------------------- plane */
+
+/**
+ * The plane: one mesh of coloured boxes (flight/plane.ts), lit by the same three steps of light as
+ * the city. Each vertex says which part it belongs to and where that part hinges, so the control
+ * surfaces, the propeller and the boost flame all move here, in the vertex stage, in one draw call.
+ *
+ *   aPart  0 airframe  1 propeller  2 left aileron  3 right aileron  4 elevator  5 rudder
+ *          6 boost flame  7 propeller disc
+ *   aGlow  0 paint  1 red nav light  2 green nav light  3 strobe  4 landing light  5 flame
+ *
+ * uSurf is (aileron, elevator, rudder) in radians: positive rolls right, pitches up, yaws right.
+ */
+export function createPlaneMaterial(shared: SharedUniforms): ShaderMaterial {
+  return make(
+    shared,
+    /* glsl */ `
+in vec3 aTint;
+in float aGlow;
+in float aPart;
+in vec3 aPivot;
+uniform float uProp;
+uniform vec3 uSurf;
+uniform float uBoost;
+out vec3 vWorld;
+out vec3 vColor;
+out float vGlow;
+out float vPart;
+out vec2 vDisc;
+vec3 turnX(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c); }
+vec3 turnY(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c); }
+vec3 turnZ(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x * c - p.y * s, p.x * s + p.y * c, p.z); }
+void main() {
+  vec3 p = position - aPivot;
+  int part = int(aPart + 0.5);
+  // Every surface hinges at its leading edge and trails towards the tail (+z).
+  if (part == 1) p = turnZ(p, uProp);
+  else if (part == 2) p = turnX(p, uSurf.x);
+  else if (part == 3) p = turnX(p, -uSurf.x);
+  else if (part == 4) p = turnX(p, -uSurf.y);
+  else if (part == 5) p = turnY(p, uSurf.z);
+  else if (part == 6) p *= vec3(step(0.001, uBoost), step(0.001, uBoost), uBoost);
+  vDisc = p.xy;
+  vec4 wp = modelMatrix * vec4(p + aPivot, 1.0);
+  vWorld = wp.xyz;
+  vColor = aTint;
+  vGlow = aGlow;
+  vPart = aPart;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    /* glsl */ `
+in vec3 vWorld;
+in vec3 vColor;
+in float vGlow;
+in float vPart;
+in vec2 vDisc;
+void main() {
+  if (vPart > 6.5) {
+    // The spinning propeller as a see-through disc: a ring of scattered pixels.
+    float r = length(vDisc);
+    if (r > 2.3 || r < 0.55 || bayer4(gl_FragCoord.xy) > 0.22) discard;
+    outColor = vec4(vec3(0.2, 0.21, 0.24) * mix(vec3(1.0), uAmbient, 0.6), 1.0);
+    return;
+  }
+  // Mostly the world's light, with a little of its own so it never sinks into the night.
+  vec3 own = mix(vec3(1.0), uAmbient, 0.5);
+  vec3 c = vColor * mix(lambert3(flatNormal(vWorld)), own, 0.25);
+  if (vGlow > 0.5) {
+    float blink = 0.55 + 0.45 * sin(uTime * 9.0);
+    if (vGlow < 1.5) c = vec3(1.0, 0.19, 0.19) * (0.6 + 0.4 * blink);
+    else if (vGlow < 2.5) c = vec3(0.21, 1.0, 0.48) * (0.6 + 0.4 * (1.0 - blink));
+    else if (vGlow < 3.5) c = mix(c, vec3(1.0), step(0.88, fract(uTime * 0.8)));
+    else if (vGlow < 4.5) c = mix(c, vec3(1.0, 0.96, 0.8), uNight);
+    else c = vColor;
+  }
+  outColor = vec4(c, 1.0);
+}`,
+    { uProp: { value: 0 }, uSurf: { value: new Vector3() }, uBoost: { value: 0 } },
   );
 }
 
