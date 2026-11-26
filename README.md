@@ -24,8 +24,16 @@ Concept inspired by [dvlan.dev](https://dvlan.dev). All code, art and copy here 
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/flying.jpg" alt="Flying towards the Sky Tower over the Viaduct, with the HUD showing speed, radar, heading and altitude"><br><sub>Over the Viaduct, heading for the Sky Tower.</sub></td>
+<td width="50%"><img src="docs/screenshots/flying.jpg" alt="Flying over Victoria Quarter towards the city centre, the Sky Tower on the left, with the HUD showing speed, radar, heading and altitude"><br><sub>Over Victoria Quarter, heading into the city.</sub></td>
 <td width="50%"><img src="docs/screenshots/briefing.jpg" alt="A project briefing docked on the right while the camera circles the Sky Tower"><br><sub>A briefing opens beside its landmark while the plane holds a circle.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/marina.jpg" alt="Over St Marys Bay: the motorway with its lane markings, trees on the cliff, Westhaven marina full of boats and the Harbour Bridge beyond"><br><sub>St Marys Bay: a marked motorway, trees where LiDAR says they are, Westhaven's boats and the bridge.</sub></td>
+<td><img src="docs/screenshots/suburb.jpg" alt="Over Freemans Bay: houses with pitched roofs, windows and doors, street trees, and the Sky Tower on the skyline"><br><sub>Freemans Bay: roofs, windows and trees on the way into town.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/port.jpg" alt="The container terminal: blue-grey cranes on the quay, some with booms raised, and blocks of coloured containers"><br><sub>The port, with its cranes where they really stand.</sub></td>
+<td><img src="docs/screenshots/night-harbour.jpg" alt="Westhaven marina at night under the stars, with the Harbour Bridge floodlit along its length"><br><sub>The marina at night, the bridge floodlit behind it.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/night.jpg" alt="The city at night: lit windows, a floodlit Sky Tower and stars"><br><sub>Night, on the real Auckland clock or with <code>?time=night</code>.</sub></td>

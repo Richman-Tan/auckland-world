@@ -1,6 +1,6 @@
 # Plan: "Fly over Auckland" portfolio (inspired by dvlan.dev)
 
-> **Status (November 2026).** This is the original build plan, kept as a record. Phase 1 (M0 to M6) and Phase 2's Sky Deck room, Claude chat and Vercel config are built. Where this document and the code disagree, the code wins: the current layout, scripts and behaviour are described in `README.md`. Never built from this plan: music, and `osmtogeojson` / `lerc` (neither was needed).
+> **Status (November 2026).** This is the original build plan, kept as a record. Phase 1 (M0 to M6) and Phase 2's Sky Deck room, Claude chat and Vercel config are built. A later round (v0.3.0) gave the world its close-up detail: roads with markings, ground drawn from land type, LiDAR tree canopy and trees, pitched roofs and wall detail, a rebuilt Harbour Bridge, marinas with boats, and five modelled landmarks; those are described in the README, not here. Where this document and the code disagree, the code wins: the current layout, scripts and behaviour are described in `README.md`. Never built from this plan: music, and `osmtogeojson` / `lerc` (neither was needed).
 
 ## Context
 
