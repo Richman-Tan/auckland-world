@@ -6,7 +6,8 @@
  * is over open water on the loaded map, which is what keeps the synthetic test map (where these
  * coordinates mean nothing) free of boats sailing across fields.
  */
-import { HARBOUR_BRIDGE, type WorldQuery, bridgeProfileAt } from './collision';
+import { HARBOUR_BRIDGE, bridgeModel } from './bridge';
+import type { WorldQuery } from './collision';
 import { type GeoFit, type MapMeta, latLonToLocal } from './mapFormat';
 
 export interface XZ {
@@ -163,7 +164,10 @@ export const BRIDGE_LANES = [3.5, 7.2] as const;
 export const BRIDGE_CAR_SPEED = 22;
 
 export interface BridgeGeometry {
+  /** End a to end b of the measured line. Pier positions are fractions of this. */
   length: number;
+  /** The stretch that is bridge, abutment to abutment: where traffic runs. Distances from end a. */
+  road: { from: number; to: number };
   /** Position on the road surface at distance s from end a, `lateral` metres to the side. */
   at(s: number, lateral: number): { x: number; y: number; z: number };
   /** Heading (radians, 0 = north, clockwise) when driving from a to b. */
@@ -171,21 +175,10 @@ export interface BridgeGeometry {
 }
 
 export function bridgeGeometry(hb: MapMeta['landmarks']['harbourBridge']): BridgeGeometry {
-  const dx = hb.b.x - hb.a.x;
-  const dz = hb.b.z - hb.a.z;
-  const length = Math.hypot(dx, dz);
-  const ux = dx / length;
-  const uz = dz / length;
-  // Same lateral axis as the bridge model (world/landmarks/harbourBridge.ts).
-  const vx = -uz;
-  const vz = ux;
-  return {
-    length,
-    heading: Math.atan2(ux, -uz),
-    at(s, lateral) {
-      return { x: hb.a.x + ux * s + vx * lateral, y: bridgeProfileAt(hb.deckY, hb.step, s), z: hb.a.z + uz * s + vz * lateral };
-    },
-  };
+  // The same smoothed deck and axes as the model and the colliders (./bridge).
+  const m = bridgeModel(hb);
+  const road = { from: m.span.first * m.step, to: Math.min(m.span.last * m.step, m.length) };
+  return { length: m.length, road, heading: m.heading, at: (s, lateral) => m.at(s, lateral) };
 }
 
 /**

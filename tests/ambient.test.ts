@@ -140,6 +140,10 @@ describe.skipIf(!realMapExists)('ambient paths on the real map', () => {
     const hb = meta.landmarks.harbourBridge;
     const g = bridgeGeometry(hb);
     expect(g.length).toBeGreaterThan(1000);
+    // Traffic keeps to the bridge itself.
+    expect(g.road.from).toBeGreaterThanOrEqual(0);
+    expect(g.road.to).toBeLessThanOrEqual(g.length);
+    expect(g.road.to - g.road.from).toBeGreaterThan(900);
     for (let i = 0; i < 36; i++) {
       const car = bridgeCar(i, 36, g.length, 123.4);
       const p = g.at(car.s, car.lateral);

@@ -121,8 +121,9 @@ export function createAmbient(meta: MapMeta, query: WorldQuery, shared: SharedUn
     disposables.push(geo, mesh);
     updaters.push((time) => {
       for (let i = 0; i < count; i++) {
-        const car = bridgeCar(i, count, bridge.length, time);
-        const p = bridge.at(car.s, car.lateral);
+        // Cars keep to the bridge itself: abutment to abutment.
+        const car = bridgeCar(i, count, bridge.road.to - bridge.road.from, time);
+        const p = bridge.at(bridge.road.from + car.s, car.lateral);
         dummy.position.set(p.x, p.y, p.z);
         dummy.rotation.set(0, -(car.forward ? bridge.heading : bridge.heading + Math.PI), 0);
         // Larger than life, like the bridge's own members, so a car is still a few pixels from the air.

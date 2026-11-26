@@ -8,6 +8,7 @@
  *  - analytic colliders for the hand-modelled landmarks (Sky Tower, Harbour Bridge), whose
  *    dimensions are fixed here and must be matched by the visual models in src/world/landmarks.
  */
+import { HARBOUR_BRIDGE, bridgeModel } from './bridge';
 import {
   type Bounds,
   type BuildingsData,
@@ -71,30 +72,8 @@ export const SKY_TOWER = {
   mastRadius: 2,
 } as const;
 
-/** Harbour Bridge cross-section in metres. */
-export const HARBOUR_BRIDGE = {
-  /** Full deck width including the clip-on lanes. */
-  deckHalfWidth: 20,
-  /** Deck slab thickness below the road surface. */
-  deckThickness: 4,
-  /** The steel truss sits on the original central lanes only. */
-  trussHalfWidth: 10,
-  /** A sample counts as truss where topY - deckY exceeds this. */
-  trussMinRise: 4,
-  pierHalfLength: 6,
-  pierHalfWidth: 9,
-  /** Pier positions as fractions along a -> b. Shared by the visual model and the colliders. */
-  pierFractions: [0.08, 0.17, 0.26, 0.36, 0.48, 0.72, 0.86] as readonly number[],
-} as const;
-
-/** Profile value (deckY / topY) at distance s along a -> b, linearly interpolated. */
-export function bridgeProfileAt(profile: readonly number[], step: number, s: number): number {
-  if (profile.length === 0) return 0;
-  const f = Math.min(Math.max(s / step, 0), profile.length - 1);
-  const i = Math.floor(f);
-  const j = Math.min(i + 1, profile.length - 1);
-  return profile[i] + (profile[j] - profile[i]) * (f - i);
-}
+// The Harbour Bridge's dimensions and profile live in ./bridge (re-exported here for existing callers).
+export { HARBOUR_BRIDGE, bridgeProfileAt } from './bridge';
 
 export function landmarkColliders(meta: MapMeta): Collider[] {
   const out: Collider[] = [];
@@ -106,43 +85,39 @@ export function landmarkColliders(meta: MapMeta): Collider[] {
   out.push({ kind: 'cylinder', name: 'Sky Tower upper shaft', x: st.x, z: st.z, y0: g + SKY_TOWER.podTop, y1: g + SKY_TOWER.upperShaftTop, r: SKY_TOWER.upperShaftRadius });
   out.push({ kind: 'cylinder', name: 'Sky Tower mast', x: st.x, z: st.z, y0: g + SKY_TOWER.upperShaftTop, y1: g + SKY_TOWER.height, r: SKY_TOWER.mastRadius });
 
+  // The bridge, from the one description the model and the traffic also use (./bridge).
   const hb = meta.landmarks.harbourBridge;
-  const dx = hb.b.x - hb.a.x;
-  const dz = hb.b.z - hb.a.z;
-  const len = Math.hypot(dx, dz);
-  if (len > 1 && hb.deckY.length > 1) {
-    const ux = dx / len;
-    const uz = dz / len;
-    const n = hb.deckY.length;
-    for (let i = 0; i < n - 1; i++) {
-      const s0 = i * hb.step;
-      const s1 = Math.min((i + 1) * hb.step, len);
+  const m = bridgeModel(hb);
+  if (m.length > 1 && m.stations > 1) {
+    const { ux, uz } = m;
+    for (let i = m.span.first; i < m.span.last; i++) {
+      const s0 = i * m.step;
+      const s1 = Math.min((i + 1) * m.step, m.length);
       if (s1 <= s0) break;
       const sm = (s0 + s1) / 2;
-      const deck = bridgeProfileAt(hb.deckY, hb.step, sm);
-      const top = bridgeProfileAt(hb.topY, hb.step, sm);
-      const cx = hb.a.x + ux * sm;
-      const cz = hb.a.z + uz * sm;
+      const deck = m.deckAt(sm);
+      const { x: cx, z: cz } = m.at(sm, 0);
       const hu = (s1 - s0) / 2 + 0.5;
       out.push({ kind: 'box', name: 'Harbour Bridge deck', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.deckHalfWidth, y0: deck - HARBOUR_BRIDGE.deckThickness, y1: deck + 1 });
-      if (top - deck > HARBOUR_BRIDGE.trussMinRise) {
-        out.push({ kind: 'box', name: 'Harbour Bridge truss', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.trussHalfWidth, y0: deck + 1, y1: top });
+      // The truss is one run of stations; a segment has it if both its ends do.
+      if (m.isTruss(i) && m.isTruss(i + 1)) {
+        out.push({ kind: 'box', name: 'Harbour Bridge truss', cx, cz, ux, uz, hu, hv: HARBOUR_BRIDGE.trussHalfWidth, y0: deck + 1, y1: Math.max(m.topY[i], m.topY[i + 1]) });
       }
     }
     for (const f of HARBOUR_BRIDGE.pierFractions) {
-      const s = f * len;
-      const deck = bridgeProfileAt(hb.deckY, hb.step, s);
+      const s = f * m.length;
+      const { x: cx, z: cz } = m.at(s, 0);
       out.push({
         kind: 'box',
         name: 'Harbour Bridge pier',
-        cx: hb.a.x + ux * s,
-        cz: hb.a.z + uz * s,
+        cx,
+        cz,
         ux,
         uz,
         hu: HARBOUR_BRIDGE.pierHalfLength,
         hv: HARBOUR_BRIDGE.pierHalfWidth,
         y0: -10,
-        y1: deck - HARBOUR_BRIDGE.deckThickness,
+        y1: m.deckAt(s) - HARBOUR_BRIDGE.deckThickness,
       });
     }
   }

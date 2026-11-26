@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-11-04T22:00:49.077Z",
+ "generatedAt": "2026-11-26T02:05:46.537Z",
  "sources": {
   "osm": {
    "baseTimestamp": "2026-11-04T21:42:19Z"
@@ -748,8 +748,8 @@
    "sha256": "b36e50b34eae9e93f1eadefd67a622662dab88823289faf737d6cc6c141bb4a2"
   },
   "buildings.bin.gz": {
-   "bytes": 745263,
-   "sha256": "beda757928426619b6dc26367ad42942104c0fe4a09b91cf4318a33824763dd9"
+   "bytes": 743638,
+   "sha256": "a946ac62f3360b3a9f264a5d647ae18a0ee85c32def1dad9e1278e98f4a10faa"
   },
   "ground.webp": {
    "bytes": 919582,

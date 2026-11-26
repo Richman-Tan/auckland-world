@@ -1,6 +1,6 @@
 /** Auckland Harbour Bridge: deck, clip-on girders, piers and a steel truss that follows topY. */
 import type { BufferGeometry } from 'three';
-import { HARBOUR_BRIDGE as H, bridgeProfileAt } from '../../shared/collision';
+import { HARBOUR_BRIDGE as H, bridgeModel } from '../../shared/bridge';
 import type { MapMeta } from '../../shared/mapFormat';
 import { MeshBuilder, type V3 } from './builder';
 
@@ -13,19 +13,18 @@ const CONCRETE = '#b8b2a6';
 const MEMBER = 2.6;
 
 export function buildHarbourBridge(meta: MapMeta): BufferGeometry {
-  const hb = meta.landmarks.harbourBridge;
+  // The smoothed deck and the single truss run, shared with the colliders and the traffic.
+  const hb = bridgeModel(meta.landmarks.harbourBridge);
   const b = new MeshBuilder();
-  const dx = hb.b.x - hb.a.x;
-  const dz = hb.b.z - hb.a.z;
-  const len = Math.hypot(dx, dz);
-  const ux = dx / len;
-  const uz = dz / len;
+  const len = hb.length;
   // lateral unit vector (perpendicular, horizontal)
-  const vx = -uz;
-  const vz = ux;
-  const n = hb.deckY.length;
+  const { vx, vz } = hb;
+  const n = hb.stations;
 
-  const at = (s: number, lat: number, y: number): V3 => [hb.a.x + ux * s + vx * lat, y, hb.a.z + uz * s + vz * lat];
+  const at = (s: number, lat: number, y: number): V3 => {
+    const p = hb.at(s, lat, y);
+    return [p.x, p.y, p.z];
+  };
   const sOf = (i: number) => Math.min(i * hb.step, len);
 
   /** A slab between two stations: lateral extent [l0, l1], vertical [yBot, yTop] given as per-station offsets from deck. */
@@ -38,7 +37,7 @@ export function buildHarbourBridge(meta: MapMeta): BufferGeometry {
   };
 
   const gird = H.deckHalfWidth - 3;
-  for (let i = 0; i < n - 1; i++) {
+  for (let i = hb.span.first; i < hb.span.last; i++) {
     const s0 = sOf(i);
     const s1 = sOf(i + 1);
     if (s1 <= s0) break;
@@ -54,7 +53,7 @@ export function buildHarbourBridge(meta: MapMeta): BufferGeometry {
   // piers
   for (const f of H.pierFractions) {
     const s = f * len;
-    const deck = bridgeProfileAt(hb.deckY, hb.step, s);
+    const deck = hb.deckAt(s);
     const top = deck - H.deckThickness;
     const c: V3[] = [
       at(s - H.pierHalfLength, -H.pierHalfWidth, -10), at(s + H.pierHalfLength, -H.pierHalfWidth, -10),
@@ -66,7 +65,7 @@ export function buildHarbourBridge(meta: MapMeta): BufferGeometry {
   }
 
   // truss: two planes on the central lanes, top chord following topY
-  const isTruss = (i: number) => hb.topY[i] - hb.deckY[i] > H.trussMinRise;
+  const isTruss = (i: number) => hb.isTruss(i);
   const chordBottom = 1.4;
   for (const lat of [-H.trussHalfWidth + 1.3, H.trussHalfWidth - 1.3]) {
     for (let i = 0; i < n; i++) {
