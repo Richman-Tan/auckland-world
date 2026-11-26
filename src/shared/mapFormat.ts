@@ -105,6 +105,16 @@ export function isMapMeta(v: unknown): v is MapMeta {
   );
 }
 
+/**
+ * The URL of one of the map's files, with the start of its hash as a query. The address then changes
+ * exactly when the file does, so a browser can keep its copy for as long as it likes and still never
+ * show a stale one. A file the map does not list keeps its plain address.
+ */
+export function mapFileUrl(base: string, meta: Pick<MapMeta, 'files'>, name: string): string {
+  const hash = meta.files?.[name]?.sha256;
+  return hash ? `${base}${name}?v=${hash.slice(0, 12)}` : `${base}${name}`;
+}
+
 /* --------------------------------------------------------------- geo helpers */
 
 export function evalPoly2(c: Poly2, a: number, b: number): number {

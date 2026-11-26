@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { bootScript } from '../scripts/vite/pagePrerender';
+import { bootScript, withMapVersion } from '../scripts/vite/pagePrerender';
+import { type MapMeta, mapFileUrl } from '../src/shared/mapFormat';
+import { metaUrl } from '../src/world/loader';
 import { content } from '../src/content';
 import { jobTitle } from '../src/content/renderHtml';
 import { pixelScaleFor, TARGET_HEIGHT } from '../src/shared/pixelScale';
@@ -277,5 +279,36 @@ describe('the time in Auckland on the title screen', () => {
     // 1 July, 05:05 UTC is 5:05 in the evening (NZST, UTC+12).
     expect(aucklandTime(new Date(Date.UTC(2026, 6, 1, 5, 5)))).toBe('5:05 pm');
     expect(aucklandTime(new Date(Date.UTC(2026, 6, 1, 12, 0)))).toBe('12:00 am');
+  });
+});
+
+describe('map files are never read from a stale cache', () => {
+  const home = file('index.html');
+
+  it('stamps the map version on the preload and on the page, so both ask for the same address', () => {
+    const out = withMapVersion(home, 'abc123def456');
+    expect(out).toContain('<link rel="preload" href="/map/meta.json?v=abc123def456" as="fetch" crossorigin />');
+    expect(out).toMatch(/<html lang="en" data-map-version="abc123def456">/);
+    expect(out).not.toContain('href="/map/meta.json"');
+    // The script builds the same address from the stamp.
+    expect(metaUrl('/map/', 'abc123def456')).toBe('/map/meta.json?v=abc123def456');
+  });
+
+  it('leaves other pages and other maps alone', () => {
+    expect(withMapVersion('<html lang="en"><head></head></html>', 'abc')).toBe('<html lang="en"><head></head></html>');
+    expect(withMapVersion(home, null)).toBe(home);
+    expect(metaUrl('/map-fake/', 'abc')).toBe('/map-fake/meta.json');
+    expect(metaUrl('/map/', undefined)).toBe('/map/meta.json');
+  });
+
+  it('addresses each data file by its own hash', () => {
+    const meta = { files: { 'roads.bin.gz': { bytes: 1, sha256: '855441d509fd0123456789abcdef' } } };
+    expect(mapFileUrl('/map/', meta, 'roads.bin.gz')).toBe('/map/roads.bin.gz?v=855441d509fd');
+    expect(mapFileUrl('/map/', meta, 'unlisted.bin')).toBe('/map/unlisted.bin');
+    // Every file the real map uses is listed, so every one of them gets a versioned address.
+    const real = JSON.parse(file('public/map/meta.json')) as MapMeta;
+    for (const name of [real.terrain.file, real.buildings.file, real.ground.file, real.ground.loFile, real.minimap.file, real.detail?.roads?.file ?? real.terrain.file]) {
+      expect(mapFileUrl('/map/', real, name), name).toMatch(/\?v=[0-9a-f]{12}$/);
+    }
   });
 });

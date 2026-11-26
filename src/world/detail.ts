@@ -4,7 +4,7 @@
  * and none of it is required: a file that is missing or fails just means less to see up close.
  */
 import type { QualityTier } from '../shared/detail';
-import type { MapMeta, TerrainGrid } from '../shared/mapFormat';
+import { type MapMeta, type TerrainGrid, mapFileUrl } from '../shared/mapFormat';
 import type { DetailOutput } from './buildDetail';
 import type { WorkerRequest, WorkerResponse } from './geometry.worker';
 import { fetchBytes } from './loader';
@@ -12,7 +12,7 @@ import { fetchBytes } from './loader';
 export function loadDetail(base: string, meta: MapMeta, terrain: TerrainGrid, quality: QualityTier): Promise<DetailOutput> {
   const files = meta.detail;
   if (!files?.roads) return Promise.resolve({});
-  return fetchBytes(base + files.roads.file, () => {}).then(
+  return fetchBytes(mapFileUrl(base, meta, files.roads.file), () => {}).then(
     (roads) =>
       new Promise<DetailOutput>((resolve, reject) => {
         const worker = new Worker(new URL('./geometry.worker.ts', import.meta.url), { type: 'module' });

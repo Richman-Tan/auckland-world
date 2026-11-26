@@ -7,6 +7,7 @@ import { Texture, NearestFilter, LinearMipmapLinearFilter, ClampToEdgeWrapping }
 import type { LoadWorld, LoadWorldOptions, WorldScene } from '../app/contracts';
 import { WorldSceneImpl } from '../render/worldScene';
 import { createWorldQuery, landmarkColliders } from '../shared/collision';
+import { mapFileUrl } from '../shared/mapFormat';
 import type { BuildOutput } from './buildWorld';
 import { loadDetail } from './detail';
 import type { WorkerRequest, WorkerResponse } from './geometry.worker';
@@ -58,9 +59,9 @@ export const loadWorld: LoadWorld = async (opts: LoadWorldOptions): Promise<Worl
   progress.report(names[0], 0, 'Fetching the map');
 
   const [terrain, buildings, ground] = await Promise.all([
-    fetchBytes(base + meta.terrain.file, (n) => progress.report(meta.terrain.file, n, 'Fetching terrain')),
-    fetchBytes(base + meta.buildings.file, (n) => progress.report(meta.buildings.file, n, 'Fetching buildings')),
-    loadGround(base + groundFile, (n) => progress.report(groundFile, n, 'Fetching ground')),
+    fetchBytes(mapFileUrl(base, meta, meta.terrain.file), (n) => progress.report(meta.terrain.file, n, 'Fetching terrain')),
+    fetchBytes(mapFileUrl(base, meta, meta.buildings.file), (n) => progress.report(meta.buildings.file, n, 'Fetching buildings')),
+    loadGround(mapFileUrl(base, meta, groundFile), (n) => progress.report(groundFile, n, 'Fetching ground')),
   ]);
   progress.enter('build', 'Building the city');
 

@@ -10,7 +10,7 @@ import { aucklandSolarHour, aucklandTime, chosenSolarHour, dayPart, lookAtSolar 
 import type { Obstruction } from '../flight/holdView';
 import { content } from '../content/index';
 import type { StopId } from '../content/types';
-import { latLonToLocal } from '../shared/mapFormat';
+import { latLonToLocal, mapFileUrl } from '../shared/mapFormat';
 import { createUi } from '../ui/index';
 import type {
   Autopilot,
@@ -620,7 +620,7 @@ export function startApp(): void {
     input = inputMod.createInput({ canvas, touchRoot, invertPitch: settings.get().invertPitch });
     input.onAction(onAction);
     setInputMode(state);
-    const minimapUrl = `${baseUrl}${world.meta.minimap.file}`;
+    const minimapUrl = mapFileUrl(baseUrl, world.meta, world.meta.minimap.file);
     ui.setWorld({ meta: world.meta, stops, minimapUrl });
     const deck = createSkyDeck(world.meta);
     world.add(deck.group);

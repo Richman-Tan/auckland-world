@@ -35,8 +35,19 @@ export class ProgressTracker {
   }
 }
 
+/**
+ * The map's description. Every other file is addressed by its own hash (mapFileUrl), which this
+ * file supplies, so this is the one whose freshness matters: the page carries the hash of the
+ * meta.json it was built with (scripts/vite/pagePrerender.ts), and asking for that address means a
+ * new deploy is never read through an old cached copy. The page's preload asks for the same address.
+ */
+export function metaUrl(baseUrl: string, version: string | undefined): string {
+  return version && baseUrl === '/map/' ? `${baseUrl}meta.json?v=${version}` : `${baseUrl}meta.json`;
+}
+
 export async function fetchMeta(baseUrl: string): Promise<MapMeta> {
-  const res = await fetch(`${baseUrl}meta.json`);
+  const version = typeof document === 'undefined' ? undefined : document.documentElement.dataset.mapVersion;
+  const res = await fetch(metaUrl(baseUrl, version));
   if (!res.ok) throw new Error(`meta.json: HTTP ${res.status}`);
   const meta: unknown = await res.json();
   if (!isMapMeta(meta)) throw new Error('meta.json is not a valid map description');
